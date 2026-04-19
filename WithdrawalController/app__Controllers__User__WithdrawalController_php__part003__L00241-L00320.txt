@@ -1,0 +1,84 @@
+﻿# source: app/Controllers/User/WithdrawalController.php
+# lines: 241-320
+# part: 3
+
+ * تایید چالش امنیتی برداشت
+ * POST /withdrawal/challenge/verify
+ */
+public function verifyWithdrawalChallenge(): void
+{
+    $userId = (int)$this->userId();
+
+    ApiRateLimiter::enforce('withdrawal_challenge_verify', $userId, is_ajax());
+
+    $code = trim((string)$this->request->input('code'));
+    if ($code === '') {
+        $this->response->json([
+            'success' => false,
+            'message' => 'کد تایید الزامی است',
+        ], 422);
+        return;
+    }
+
+    $challenge = $_SESSION['withdraw_challenge'] ?? null;
+    if (!is_array($challenge)) {
+        $this->response->json([
+            'success' => false,
+            'message' => 'درخواست چالش یافت نشد',
+        ], 400);
+        return;
+    }
+
+    if ((int)($challenge['user_id'] ?? 0) !== $userId) {
+        unset($_SESSION['withdraw_challenge'], $_SESSION['withdraw_challenge_passed'], $_SESSION['withdraw_challenge_passed_until']);
+        $this->response->json([
+            'success' => false,
+            'message' => 'چالش نامعتبر است',
+        ], 403);
+        return;
+    }
+
+    if ((int)($challenge['expires_at'] ?? 0) < time()) {
+        unset($_SESSION['withdraw_challenge']);
+        $this->response->json([
+            'success' => false,
+            'message' => 'کد منقضی شده است',
+        ], 400);
+        return;
+    }
+
+    $attempts = (int)($challenge['attempts'] ?? 0);
+    $maxAttempts = (int)($challenge['max_attempts'] ?? 5);
+
+    if ($attempts >= $maxAttempts) {
+        unset($_SESSION['withdraw_challenge']);
+        $this->response->json([
+            'success' => false,
+            'message' => 'تعداد تلاش بیش از حد مجاز است',
+        ], 429);
+        return;
+    }
+
+    $challenge['attempts'] = $attempts + 1;
+    $_SESSION['withdraw_challenge'] = $challenge;
+
+    if (!password_verify($code, (string)($challenge['code_hash'] ?? ''))) {
+        $remaining = max(0, $maxAttempts - $challenge['attempts']);
+        $this->response->json([
+            'success' => false,
+            'message' => 'کد تایید نادرست است',
+            'remaining_attempts' => $remaining,
+        ], 422);
+        return;
+    }
+
+    $_SESSION['withdraw_challenge_passed'] = true;
+    $_SESSION['withdraw_challenge_passed_until'] = time() + 300;
+    unset($_SESSION['withdraw_challenge']);
+
+    $this->response->json([
+        'success' => true,
+        'message' => 'تایید امنیتی با موفقیت انجام شد',
+    ]);
+}
+}
