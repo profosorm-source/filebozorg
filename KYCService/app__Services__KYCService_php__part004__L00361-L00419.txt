@@ -1,0 +1,63 @@
+﻿# source: app/Services/KYCService.php
+# lines: 361-419
+# part: 4
+
+        ]);
+
+        if (!$okKyc) {
+            $this->db->rollBack();
+            return ['success' => false, 'message' => 'خطا در بروزرسانی KYC'];
+        }
+
+        $okUser = $this->userModel->update((int)$kyc->user_id, [
+            'kyc_status' => 'rejected',
+            'is_verified' => 0,
+        ]);
+
+        if (!$okUser) {
+            $this->db->rollBack();
+            return ['success' => false, 'message' => 'خطا در بروزرسانی کاربر'];
+        }
+
+        $this->auditTrail->record('kyc.rejected', (int)$kyc->user_id, [
+            'kyc_id' => $kycId,
+            'reason' => $reason,
+        ], $adminId);
+
+        $this->db->commit();
+
+        // نوتیف خارج از transaction
+        try {
+            if (method_exists($this->notificationService, 'sendKYCRejected')) {
+                $this->notificationService->sendKYCRejected((int)$kyc->user_id, $kycId, $reason);
+            }
+        } catch (\Throwable $e) {
+            $this->logger->error('kyc.reject.notification.failed', [
+                'channel' => 'kyc',
+                'kyc_id' => $kycId,
+                'user_id' => (int)$kyc->user_id,
+                'error' => $e->getMessage(),
+                'exception' => get_class($e),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+        }
+
+        return ['success' => true, 'message' => 'KYC با موفقیت رد شد'];
+    } catch (\Throwable $e) {
+        $this->db->rollBack();
+
+        $this->logger->critical('kyc.reject.exception', [
+            'channel' => 'kyc',
+            'kyc_id' => $kycId,
+            'admin_id' => $adminId,
+            'error' => $e->getMessage(),
+            'exception' => get_class($e),
+            'file' => $e->getFile(),
+            'line' => $e->getLine(),
+        ]);
+
+        return ['success' => false, 'message' => 'خطای سیستمی در رد KYC'];
+    }
+}
+}

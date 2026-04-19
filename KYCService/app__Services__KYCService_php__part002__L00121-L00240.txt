@@ -1,0 +1,124 @@
+﻿# source: app/Services/KYCService.php
+# lines: 121-240
+# part: 2
+
+        $exif = @exif_read_data($imagePath);
+        if ($exif) {
+            if (isset($exif['Software'])) {
+                $software = strtolower($exif['Software']);
+                if (strpos($software, 'photoshop') !== false || strpos($software, 'gimp') !== false) {
+                    $suspicious = true;
+                    $reasons[]  = 'تصویر با نرم‌افزار ویرایش ساخته شده';
+                }
+            }
+
+            if (isset($exif['DateTime']) && isset($exif['DateTimeOriginal'])) {
+                $diff = abs(strtotime($exif['DateTime']) - strtotime($exif['DateTimeOriginal']));
+                if ($diff > 60) {
+                    $suspicious = true;
+                    $reasons[]  = 'اختلاف زمانی مشکوک بین ساخت و ویرایش';
+                }
+            }
+        }
+
+        if ($suspicious) {
+            $this->logger->warning('kyc.image.suspicious', [
+                'image_path' => basename($imagePath),
+                'reasons' => $reasons,
+                'software' => $exif['Software'] ?? null
+            ]);
+        }
+
+        return ['suspicious' => $suspicious, 'reasons' => $reasons];
+    }
+
+    /**
+     * ثبت KYC با یک فایل
+     */
+    public function submitKYC(int $userId, array $data, array $files): array
+{
+    $uploadResult = null;
+
+    try {
+        // 1) ورودی پایه
+        if (empty($files['verification_image'])) {
+            return ['success' => false, 'message' => 'تصویر احراز هویت الزامی است'];
+        }
+
+        $nationalCode = trim((string)($data['national_code'] ?? ''));
+        if ($nationalCode !== '' && !preg_match('/^\d{10}$/', $nationalCode)) {
+            return ['success' => false, 'message' => 'کد ملی نامعتبر است'];
+        }
+
+        // 2) آپلود فایل
+        $uploadResult = $this->uploadService->upload($files['verification_image'], 'kyc');
+        if (empty($uploadResult['success'])) {
+            return ['success' => false, 'message' => $uploadResult['message'] ?? 'خطا در آپلود تصویر'];
+        }
+
+        $filename = (string)$uploadResult['filename'];
+
+        // 3) بررسی فتوشاپ/ریسک
+        $photoshopCheck = $this->detectPhotoshop($filename);
+
+        // 4) ثبت اتمیک
+        $this->db->beginTransaction();
+
+        $kycId = $this->kycModel->create([
+            'user_id'            => $userId,
+            'verification_image' => $filename,
+            'national_code'      => $nationalCode !== '' ? $nationalCode : null,
+            'birth_date'         => $data['birth_date'] ?? null,
+            'status'             => !empty($photoshopCheck['suspicious']) ? 'under_review' : 'pending',
+            'ip_address'         => get_client_ip(),
+            'user_agent'         => get_user_agent(),
+            'device_fingerprint' => generate_device_fingerprint(),
+        ]);
+
+        if (!$kycId) {
+            $this->db->rollBack();
+            $this->uploadService->delete('kyc/' . $filename);
+            $this->logger->error('kyc.create.failed', [
+                'channel' => 'kyc',
+                'user_id' => $userId,
+            ]);
+            return ['success' => false, 'message' => 'خطا در ثبت درخواست احراز هویت'];
+        }
+
+        $okUser = $this->userModel->update($userId, [
+            'kyc_status' => 'pending',
+        ]);
+
+        if (!$okUser) {
+            $this->db->rollBack();
+            $this->uploadService->delete('kyc/' . $filename);
+            $this->logger->error('kyc.user_status_update.failed', [
+                'channel' => 'kyc',
+                'user_id' => $userId,
+                'kyc_id' => $kycId,
+            ]);
+            return ['success' => false, 'message' => 'خطا در بروزرسانی وضعیت کاربر'];
+        }
+
+        $this->auditTrail->record('kyc.submitted', $userId, [
+            'kyc_id' => (int)$kycId,
+            'photoshop_suspicious' => !empty($photoshopCheck['suspicious']) ? 1 : 0,
+        ], $userId);
+
+        $this->db->commit();
+
+        return [
+            'success' => true,
+            'message' => 'درخواست احراز هویت ثبت شد',
+            'kyc_id' => (int)$kycId,
+        ];
+    } catch (\Throwable $e) {
+        $this->db->rollBack();
+
+        // اگر فایل آپلود شده اما DB ثبت نشده بود، orphan نماند
+        if (!empty($uploadResult['filename'])) {
+            $this->uploadService->delete('kyc/' . $uploadResult['filename']);
+        }
+
+        $this->logger->critical('kyc.submit.exception', [
+            'channel' => 'kyc',
