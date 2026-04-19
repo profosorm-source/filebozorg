@@ -1,0 +1,12 @@
+﻿# source: app/Services/SocialTask/SocialTaskService.php
+# lines: 841-848
+# part: 8
+
+        };
+    }
+
+    private function sanitizeSearch(string $q): string
+    {
+        return preg_replace('/[%_\\\\]/', '\\\\$0', mb_substr(trim($q), 0, 100));
+    }
+}
