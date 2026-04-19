@@ -1,0 +1,124 @@
+﻿# source: app/Controllers/Admin/SocialTaskController.php
+# lines: 241-360
+# part: 3
+
+    }
+
+    $this->response->json([
+        'success' => (bool)($result['success'] ?? false),
+        'message' => $result['message'] ?? 'خطا'
+    ], !empty($result['success']) ? 200 : 422);
+}
+    public function overrideDecision(): void
+    {
+        $id       = (int)$this->request->param('id');
+        $decision = $this->request->post('decision') ?? '';
+        $reason   = trim($this->request->post('reason') ?? '');
+
+        if (!in_array($decision, ['approved', 'soft_approved', 'rejected'], true)) {
+            $this->response->json(['success' => false, 'message' => 'تصمیم معتبر نیست']);
+            return;
+        }
+        if (!$reason) {
+            $this->response->json(['success' => false, 'message' => 'دلیل override الزامی است']);
+            return;
+        }
+
+        $exec = $this->getExecutionById($id);
+        if (!$exec) {
+            $this->response->json(['success' => false, 'message' => 'اجرا یافت نشد']);
+            return;
+        }
+
+        $this->db->query(
+            "UPDATE social_task_executions
+             SET decision = ?, decision_reason = CONCAT('admin_override: ', ?), updated_at = NOW()
+             WHERE id = ?",
+            [$decision, $reason, $id]
+        );
+
+        // اگر override به approved تغییر کرد، trust را جایزه بده
+        if ($decision === 'approved' && $exec->decision !== 'approved') {
+            $this->trust->rewardGoodTask((int)$exec->executor_id, $id);
+        }
+        // اگر override به rejected تغییر کرد، trust جریمه شود
+        if ($decision === 'rejected' && $exec->decision !== 'rejected') {
+            $this->trust->penalizeRejection((int)$exec->executor_id, $id);
+        }
+
+        $this->auditTrail->record('social_exec.override', admin_id(), [
+            'execution_id'  => $id,
+            'old_decision'  => $exec->decision,
+            'new_decision'  => $decision,
+            'reason'        => $reason,
+        ]);
+
+        $this->response->json(['success' => true, 'message' => 'تصمیم override شد']);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Trust Dashboard
+    // ─────────────────────────────────────────────────────────────
+
+    public function trustDashboard(): void
+    {
+        $page  = max(1, (int)($this->request->get('page') ?? 1));
+        $limit = 30;
+
+        $lowTrustUsers  = $this->getLowTrustUsers($limit, ($page - 1) * $limit);
+        $totalLow       = $this->countLowTrustUsers();
+        $trustStats     = $this->getTrustStats();
+
+        view('admin.social-tasks.trust', [
+            'title'         => 'داشبورد Trust Score',
+            'lowTrustUsers' => $lowTrustUsers,
+            'trustStats'    => $trustStats,
+            'page'          => $page,
+            'total'         => $totalLow,
+            'totalPages'    => (int)ceil($totalLow / $limit),
+        ]);
+    }
+
+    public function userTrust(): void
+    {
+        $userId  = (int)$this->request->param('id');
+        $trust   = $this->trust->get($userId);
+        $weekly  = $this->trust->getWeeklyStats($userId);
+        $history = $this->getTrustHistory($userId);
+        $restriction = $this->antiFraud->getRestrictionLevel($userId);
+
+        $user = $this->db->fetch("SELECT id, full_name, email FROM users WHERE id = ? LIMIT 1", [$userId]);
+        if (!$user) {
+            $this->session->setFlash('error', 'کاربر یافت نشد.');
+            redirect(url('/admin/social-trust'));
+            return;
+        }
+
+        view('admin.social-tasks.user-trust', [
+            'title'       => 'Trust Score کاربر: ' . ($user->full_name ?? ''),
+            'user'        => $user,
+            'trust'       => $trust,
+            'weekly'      => $weekly,
+            'history'     => $history,
+            'restriction' => $restriction,
+        ]);
+    }
+
+    public function adjustTrust(): void
+    {
+        $userId = (int)$this->request->param('id');
+        $delta  = (float)($this->request->post('delta') ?? 0);
+        $reason = trim($this->request->post('reason') ?? '');
+
+        if (!$reason) {
+            $this->response->json(['success' => false, 'message' => 'دلیل الزامی است']);
+            return;
+        }
+        if ($delta === 0.0) {
+            $this->response->json(['success' => false, 'message' => 'مقدار تغییر نمی‌تواند صفر باشد']);
+            return;
+        }
+
+        // استفاده از UserScoreService موجود برای ثبت event
+        $scoreService = app()->make(\App\Services\UserScoreService::class);
+        $scoreService->applyEventDelta($userId, 'social_trust', $delta, 'admin_manual', [

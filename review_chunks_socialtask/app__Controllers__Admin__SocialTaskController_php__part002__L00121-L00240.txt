@@ -1,0 +1,124 @@
+﻿# source: app/Controllers/Admin/SocialTaskController.php
+# lines: 121-240
+# part: 2
+
+            'ad_id' => $id,
+            'reason' => $reason,
+        ]);
+    }
+
+    $this->response->json([
+        'ok' => (bool)($result['success'] ?? false),
+        'message' => $result['message'] ?? 'خطا',
+    ], !empty($result['success']) ? 200 : 422);
+}
+
+    public function pause(): void
+    {
+        $result = $this->changeAdStatus((int)$this->request->param('id'), 'paused', 'admin_paused');
+        if (is_ajax()) { $this->response->json($result); return; }
+        $this->session->setFlash($result['success'] ? 'success' : 'error', $result['message']);
+        redirect(url('/admin/social-tasks'));
+    }
+
+    public function resume(): void
+    {
+        $result = $this->changeAdStatus((int)$this->request->param('id'), 'active', 'admin_resumed');
+        if (is_ajax()) { $this->response->json($result); return; }
+        $this->session->setFlash($result['success'] ? 'success' : 'error', $result['message']);
+        redirect(url('/admin/social-tasks'));
+    }
+
+    public function cancel(int $id): void
+{
+    if (!is_admin()) {
+        $this->response->json(['ok' => false, 'message' => 'Unauthorized'], 403);
+        return;
+    }
+
+    if (!csrf_verify()) {
+        $this->response->json(['ok' => false, 'message' => 'CSRF invalid'], 419);
+        return;
+    }
+
+    $result = $this->service->adminCancelAd(admin_id(), $id);
+
+    if (!empty($result['success'])) {
+        $this->auditTrail->record('social_ad.cancelled', admin_id(), [
+            'ad_id' => $id,
+            'refund' => $result['refund'] ?? 0,
+        ]);
+    }
+
+    $this->response->json([
+        'ok' => (bool)($result['success'] ?? false),
+        'message' => $result['message'] ?? 'خطا',
+    ], !empty($result['success']) ? 200 : 422);
+}
+    // ─────────────────────────────────────────────────────────────
+    // اجراها (Executions)
+    // ─────────────────────────────────────────────────────────────
+
+    public function executions(): void
+    {
+        $page    = max(1, (int)($this->request->get('page') ?? 1));
+        $limit   = 30;
+        $filters = [
+            'decision'  => $this->request->get('decision')  ?? '',
+            'platform'  => $this->request->get('platform')  ?? '',
+            'flag'      => $this->request->get('flag')      ?? '',
+            'search'    => $this->request->get('search')    ?? '',
+        ];
+
+        [$executions, $total] = $this->getExecutions($filters, $limit, ($page - 1) * $limit);
+        $execStats            = $this->getExecutionStats();
+
+        view('admin.social-tasks.executions', [
+            'title'      => 'اجراهای تسک اجتماعی',
+            'executions' => $executions,
+            'execStats'  => $execStats,
+            'filters'    => $filters,
+            'page'       => $page,
+            'total'      => $total,
+            'totalPages' => (int)ceil($total / $limit),
+        ]);
+    }
+
+    public function executionShow(): void
+    {
+        $id   = (int)$this->request->param('id');
+        $exec = $this->getExecutionById($id);
+
+        if (!$exec) {
+            $this->session->setFlash('error', 'اجرا یافت نشد.');
+            redirect(url('/admin/social-executions'));
+            return;
+        }
+
+        // behavior data decoded
+        $behaviorData = [];
+        if (!empty($exec->behavior_data)) {
+            $behaviorData = json_decode($exec->behavior_data, true) ?? [];
+        }
+
+        view('admin.social-tasks.execution-show', [
+            'title'        => 'جزئیات اجرا #' . $id,
+            'exec'         => $exec,
+            'behaviorData' => $behaviorData,
+            'trustScore'   => $this->trust->get((int)$exec->executor_id),
+            'restriction'  => $this->antiFraud->getRestrictionLevel((int)$exec->executor_id),
+        ]);
+    }
+
+    public function flagExecution(): void
+{
+    $id   = (int)$this->request->param('id');
+    $note = trim((string)($this->request->post('note') ?? ''));
+
+    $result = $this->service->adminFlagExecution(admin_id(), $id, $note);
+
+    if (!empty($result['success'])) {
+        $this->auditTrail->record('social_exec.flagged', admin_id(), [
+            'execution_id' => $id,
+            'note' => $note,
+        ]);

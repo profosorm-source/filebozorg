@@ -1,0 +1,72 @@
+﻿# source: app/Controllers/Admin/SocialTaskController.php
+# lines: 601-668
+# part: 6
+
+    }
+
+    private function countLowTrustUsers(): int
+    {
+        return (int)($this->db->fetch(
+            "SELECT COUNT(*) AS cnt FROM social_user_trust WHERE trust_score < 40"
+        )?->cnt ?? 0);
+    }
+
+    private function getTrustStats(): object
+    {
+        return $this->db->fetch(
+            "SELECT
+                COUNT(*) AS total_users,
+                AVG(trust_score) AS avg_trust,
+                SUM(trust_score >= 60) AS high_trust,
+                SUM(trust_score BETWEEN 40 AND 59) AS mid_trust,
+                SUM(trust_score < 40) AS low_trust
+             FROM social_user_trust"
+        ) ?: (object)[];
+    }
+
+    private function getTrustHistory(int $userId): array
+    {
+        return $this->db->fetchAll(
+            "SELECT *
+             FROM user_score_events
+             WHERE user_id = ? AND domain = 'social_trust'
+             ORDER BY created_at DESC
+             LIMIT 30",
+            [$userId]
+        ) ?: [];
+    }
+
+    private function getFullStats(): object
+    {
+        return $this->db->fetch(
+            "SELECT
+                (SELECT COUNT(*) FROM social_ads) AS total_ads,
+                (SELECT COUNT(*) FROM social_ads WHERE status = 'active') AS active_ads,
+                (SELECT COUNT(*) FROM social_ads WHERE status = 'pending_review') AS pending_ads,
+                (SELECT COUNT(*) FROM social_task_executions) AS total_execs,
+                (SELECT COUNT(*) FROM social_task_executions WHERE decision = 'approved') AS approved_execs,
+                (SELECT COUNT(*) FROM social_task_executions WHERE decision = 'rejected') AS rejected_execs,
+                (SELECT COUNT(*) FROM social_task_executions WHERE flag_review = 1) AS flagged_execs,
+                (SELECT ROUND(AVG(task_score),1) FROM social_task_executions) AS avg_score,
+                (SELECT COUNT(*) FROM social_user_trust WHERE trust_score < 40) AS low_trust_users,
+                (SELECT ROUND(AVG(trust_score),1) FROM social_user_trust) AS avg_trust"
+        ) ?: (object)[];
+    }
+
+   private function changeAdStatus(int $id, string $status, string $auditEvent): array
+{
+    $result = $this->service->adminChangeAdStatus(admin_id(), $id, $status);
+
+    if (!empty($result['success'])) {
+        $this->auditTrail->record('social_ad.' . $auditEvent, admin_id(), [
+            'ad_id' => $id,
+            'status' => $status,
+        ]);
+    }
+
+    return [
+        'success' => (bool)($result['success'] ?? false),
+        'message' => $result['message'] ?? 'خطا',
+    ];
+}
+}

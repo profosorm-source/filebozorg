@@ -1,0 +1,124 @@
+﻿# source: app/Controllers/Admin/SocialTaskController.php
+# lines: 361-480
+# part: 4
+
+            'reason'   => $reason,
+            'admin_id' => admin_id(),
+        ]);
+
+        // اعمال مستقیم روی جدول trust
+        $current = $this->trust->get($userId);
+        $newVal  = max(0, min(100, $current + $delta));
+        $this->db->query(
+            "INSERT INTO social_user_trust (user_id, trust_score, updated_at) VALUES (?, ?, NOW())
+             ON DUPLICATE KEY UPDATE trust_score = ?, updated_at = NOW()",
+            [$userId, $newVal, $newVal]
+        );
+
+        $this->auditTrail->record('social_trust.adjusted', admin_id(), [
+            'user_id'   => $userId,
+            'delta'     => $delta,
+            'old_trust' => $current,
+            'new_trust' => $newVal,
+            'reason'    => $reason,
+        ]);
+
+        $this->response->json([
+            'success'   => true,
+            'message'   => 'Trust Score به‌روز شد',
+            'new_trust' => $newVal,
+        ]);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // آمار کلی
+    // ─────────────────────────────────────────────────────────────
+
+    public function stats(): void
+    {
+        $stats = $this->getFullStats();
+
+        view('admin.social-tasks.stats', [
+            'title' => 'آمار SocialTask',
+            'stats' => $stats,
+        ]);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Private helpers — DB queries
+    // ─────────────────────────────────────────────────────────────
+
+    private function getAds(array $filters, int $limit, int $offset): array
+    {
+        $where  = ['sa.deleted_at IS NULL'];
+        $params = [];
+
+        if (!empty($filters['status'])) {
+            $where[]  = 'sa.status = ?';
+            $params[] = $filters['status'];
+        }
+        if (!empty($filters['platform'])) {
+            $where[]  = 'sa.platform = ?';
+            $params[] = $filters['platform'];
+        }
+        if (!empty($filters['search'])) {
+            $like     = '%' . $filters['search'] . '%';
+            $where[]  = '(sa.title LIKE ? OR u.email LIKE ? OR u.full_name LIKE ?)';
+            $params[] = $like;
+            $params[] = $like;
+            $params[] = $like;
+        }
+
+        $whereStr = implode(' AND ', $where);
+
+        $total = (int)($this->db->fetch(
+            "SELECT COUNT(*) AS cnt FROM social_ads sa
+             LEFT JOIN users u ON u.id = sa.advertiser_id
+             WHERE {$whereStr}",
+            $params
+        )?->cnt ?? 0);
+
+        $params[] = $limit;
+        $params[] = $offset;
+
+        $ads = $this->db->fetchAll(
+            "SELECT sa.*,
+                    u.full_name AS advertiser_name,
+                    u.email     AS advertiser_email,
+                    COUNT(ste.id) AS total_execs,
+                    SUM(ste.decision = 'approved') AS approved_execs
+             FROM social_ads sa
+             LEFT JOIN users u ON u.id = sa.advertiser_id
+             LEFT JOIN social_task_executions ste ON ste.ad_id = sa.id
+             WHERE {$whereStr}
+             GROUP BY sa.id
+             ORDER BY sa.created_at DESC
+             LIMIT ? OFFSET ?",
+            $params
+        ) ?: [];
+
+        return [$ads, $total];
+    }
+
+    private function getAdById(int $id): ?object
+    {
+        return $this->db->fetch(
+            "SELECT sa.*, u.full_name AS advertiser_name, u.email AS advertiser_email
+             FROM social_ads sa
+             LEFT JOIN users u ON u.id = sa.advertiser_id
+             WHERE sa.id = ? LIMIT 1",
+            [$id]
+        ) ?: null;
+    }
+
+    private function getAdExecutions(int $adId, int $limit, int $offset): array
+    {
+        return $this->db->fetchAll(
+            "SELECT ste.*, u.full_name AS executor_name, u.email AS executor_email,
+                    COALESCE(ut.trust_score, 50) AS trust_score
+             FROM social_task_executions ste
+             JOIN users u ON u.id = ste.executor_id
+             LEFT JOIN social_user_trust ut ON ut.user_id = ste.executor_id
+             WHERE ste.ad_id = ?
+             ORDER BY ste.created_at DESC
+             LIMIT ? OFFSET ?",
