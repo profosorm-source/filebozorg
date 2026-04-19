@@ -1,0 +1,12 @@
+﻿# source: app/Controllers/User/WithdrawalController.php
+# lines: 481-488
+# part: 5
+
+    unset($_SESSION['withdraw_challenge']);
+
+    $this->response->json([
+        'success' => true,
+        'message' => 'تایید امنیتی با موفقیت انجام شد',
+    ]);
+}
+}

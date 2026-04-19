@@ -1,0 +1,124 @@
+﻿# source: app/Controllers/User/WithdrawalController.php
+# lines: 121-240
+# part: 2
+
+    $deviceFingerprint = generate_device_fingerprint();
+
+    // بررسی KYC
+    $user = $this->userModel->find($userId);
+
+    if (!$user || $user->kyc_status !== 'verified') {
+        $this->session->setFlash('error', 'احراز هویت انجام نشده است');
+        redirect('/kyc');
+        return;
+    }
+
+    // بررسی تصمیم ریسک قبل از ورود به فرآیند برداشت
+    try {
+        $riskDecision = $this->riskDecisionService->decide((int)$userId, ['action' => 'withdraw']);
+        $riskResult = (string)($riskDecision['result'] ?? 'allow');
+
+        if ($riskResult === 'block') {
+            $this->session->setFlash('error', 'به دلیل وضعیت امنیتی حساب، برداشت موقتا مسدود است.');
+            redirect('/wallet');
+            return;
+        }
+
+        if ($riskResult === 'challenge') {
+    $challengePassed = (bool)($_SESSION['withdraw_challenge_passed'] ?? false);
+    $challengeUntil = (int)($_SESSION['withdraw_challenge_passed_until'] ?? 0);
+
+    if (!$challengePassed || $challengeUntil < time()) {
+        unset($_SESSION['withdraw_challenge_passed'], $_SESSION['withdraw_challenge_passed_until']);
+        $this->session->setFlash('error', 'برای برداشت، تایید امنیتی تکمیلی الزامی است.');
+        redirect('/wallet');
+        return;
+    }
+}
+    } catch (\Throwable $riskEx) {
+    // fail-safe: اگر سرویس تصمیم ریسک در دسترس نبود، جریان برداشت را نمی‌شکنیم
+    logger()->error('withdrawal.risk_decision.precheck.failed', [
+        'channel' => 'withdrawal',
+        'request_id' => $requestId ?? null,
+        'user_id' => $userId ?? null,
+        'error' => $riskEx->getMessage(),
+        'exception' => get_class($riskEx),
+        'file' => $riskEx->getFile(),
+        'line' => $riskEx->getLine(),
+    ]);
+    }
+
+    // بررسی درخواست در انتظار
+    if ($this->withdrawalModel->hasPendingWithdrawal($userId)) {
+        $this->session->setFlash('error', 'شما یک درخواست برداشت در انتظار دارید');
+        redirect('/wallet');
+        return;
+    }
+
+    $siteCurrency = config('site_currency', 'irt');
+
+    // دریافت داده‌ها
+    $data = [
+        'currency' => $siteCurrency,
+        'amount' => $this->request->input('amount'),
+    ];
+
+    // داده‌های اضافی بر اساس نوع ارز
+    if ($siteCurrency === 'irt') {
+        $data['card_id'] = $this->request->input('card_id');
+    } else {
+        $data['wallet_address'] = $this->request->input('wallet_address');
+        $data['network'] = $this->request->input('network');
+    }
+
+    // دریافت idempotency_key از فرم (اگر ارسال شده باشد)
+    $idempotencyKey = $this->request->input('idempotency_key');
+
+    // اعتبارسنجی
+    $rules = [
+        'amount' => 'required|numeric|min:1',
+    ];
+
+    $messages = [
+        'amount.required' => 'مبلغ الزامی است',
+        'amount.numeric' => 'مبلغ باید عددی باشد',
+    ];
+
+    if ($siteCurrency === 'irt') {
+        $rules['card_id'] = 'required|numeric';
+        $messages['card_id.required'] = 'انتخاب کارت الزامی است';
+    } else {
+        $rules['wallet_address'] = 'required|min:26|max:42';
+        $rules['network'] = 'required|in:bnb20,trc20';
+        $messages['wallet_address.required'] = 'آدرس کیف پول الزامی است';
+        $messages['network.required'] = 'انتخاب شبکه الزامی است';
+    }
+
+    $validator = new Validator($data, $rules, $messages);
+
+    if ($validator->fails()) {
+        $this->session->setFlash('error', $validator->errors()[0]);
+        $this->session->setFlash('old', $data);
+        redirect('/withdrawal/create');
+        return;
+    }
+
+    try {
+        $amount = (float)$data['amount'];
+
+        // بررسی امکان برداشت
+        $canWithdraw = $this->walletService->canWithdraw($userId, $amount, $siteCurrency);
+        if (!$canWithdraw['can_withdraw']) {
+            throw new \RuntimeException($canWithdraw['message']);
+        }
+
+        // بررسی کارت (برای IRT)
+        if ($siteCurrency === 'irt') {
+            $card = $this->cardModel->find((int)$data['card_id']);
+            if (!$card || $card->user_id !== $userId || $card->status !== 'verified') {
+                throw new \RuntimeException('کارت نامعتبر است');
+            }
+        }
+
+        // قفل موجودی و ثبت تراکنش با metadata کامل
+        $transaction = $this->walletService->withdraw($userId, $amount, $siteCurrency, [

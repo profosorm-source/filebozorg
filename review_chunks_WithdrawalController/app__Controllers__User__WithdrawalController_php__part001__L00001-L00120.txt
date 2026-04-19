@@ -1,0 +1,124 @@
+﻿# source: app/Controllers/User/WithdrawalController.php
+# lines: 1-120
+# part: 1
+
+<?php
+
+namespace App\Controllers\User;
+
+use App\Models\Withdrawal;
+use App\Models\UserBankCard;
+use App\Models\User;
+use App\Services\WalletService;
+use Core\Validator;
+use App\Services\ApiRateLimiter;
+use App\Controllers\User\BaseUserController;
+
+class WithdrawalController extends BaseUserController
+{
+    private \App\Services\WithdrawalLimitService $withdrawalLimitService;
+	private \App\Services\RiskDecisionService $riskDecisionService;
+    private Withdrawal $withdrawalModel;
+    private UserBankCard $cardModel;
+    private WalletService $walletService;
+
+    public function __construct(
+    \App\Models\Withdrawal $withdrawalModel,
+    \App\Models\UserBankCard $cardModel,
+    \App\Services\WithdrawalLimitService $withdrawalLimitService,
+    \App\Services\WalletService $walletService,
+    \App\Services\RiskDecisionService $riskDecisionService
+) {
+    parent::__construct();
+    $this->withdrawalModel = $withdrawalModel;
+    $this->cardModel = $cardModel;
+    $this->walletService = $walletService;
+    $this->withdrawalLimitService = $withdrawalLimitService;
+    $this->riskDecisionService = $riskDecisionService;
+}
+
+    /**
+     * فرم برداشت وجه
+     */
+    public function create(): void
+    {
+        $userId = $this->userId();
+
+        try {
+            // بررسی KYC
+            $user = $this->userModel->find($userId);
+
+            if (!$user || $user->kyc_status !== 'verified') {
+                $this->session->setFlash('error', 'برای برداشت وجه ابتدا باید احراز هویت کنید');
+                redirect('/kyc');
+                return;
+            }
+
+            // بررسی درخواست در انتظار
+            if ($this->withdrawalModel->hasPendingWithdrawal($userId)) {
+                $this->session->setFlash('error', 'شما یک درخواست برداشت در انتظار دارید');
+                redirect('/wallet');
+                return;
+            }
+
+            // بررسی محدودیت روزانه
+            $summary = $this->walletService->getWalletSummary($userId);
+            if (!$summary->can_withdraw_today) {
+                $this->session->setFlash('error', 'شما امروز یکبار برداشت کرده‌اید');
+                redirect('/wallet');
+                return;
+            }
+
+            $siteCurrency = config('site_currency', 'irt');
+            
+            // دریافت کارت‌ها برای IRT
+            $cards = [];
+            if ($siteCurrency === 'irt') {
+                $cards = $this->cardModel->getUserCards($userId, 'verified');
+                if (empty($cards)) {
+                    $this->session->setFlash('error', 'ابتدا باید کارت بانکی خود را ثبت و تأیید کنید');
+                    redirect('/bank-cards/create');
+                    return;
+                }
+            }
+
+            $minWithdrawal = $siteCurrency === 'usdt'
+                ? (float)config('min_withdrawal_usdt', 10)
+                : (float)config('min_withdrawal_irt', 50000);
+
+            view('user.withdrawal.create', [
+                'summary' => $summary,
+                'cards' => $cards,
+                'siteCurrency' => $siteCurrency,
+                'minWithdrawal' => $minWithdrawal,
+                'pageTitle' => 'برداشت وجه'
+            ]);
+
+        } catch (\Exception $e) {
+    logger()->error('withdrawal.create.failed', [
+        'channel' => 'withdrawal',
+        'user_id' => $userId,
+        'error' => $e->getMessage(),
+        'exception' => get_class($e),
+        'file' => $e->getFile(),
+        'line' => $e->getLine(),
+    ]);
+
+            $this->session->setFlash('error', 'خطا در بارگذاری صفحه');
+            redirect('/wallet');
+        }
+    }
+
+    /**
+     * ثبت درخواست برداشت - با Idempotency Protection
+     */
+    public function store(): void
+{
+    $userId = $this->userId();
+
+    // Rate limiting: حداکثر 3 برداشت در ساعت
+    ApiRateLimiter::enforce('withdrawal', $userId, is_ajax());
+
+    // دریافت Request Metadata برای audit trail
+    $requestId = get_request_id();
+    $ipAddress = get_client_ip();

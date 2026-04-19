@@ -1,0 +1,124 @@
+﻿# source: app/Controllers/User/WithdrawalController.php
+# lines: 241-360
+# part: 3
+
+            'description' => 'درخواست برداشت',
+            'request_id' => $requestId,
+            'ip_address' => $ipAddress,
+            'device_fingerprint' => $deviceFingerprint,
+            'idempotency_key' => $idempotencyKey,
+            'card_id' => $data['card_id'] ?? null,
+            'wallet_address' => $data['wallet_address'] ?? null,
+            'network' => $data['network'] ?? null,
+        ]);
+
+        if (!$transaction || !$transaction['success']) {
+            throw new \RuntimeException($transaction['message'] ?? 'خطا در قفل کردن موجودی');
+        }
+
+        // ثبت درخواست برداشت
+        $data['user_id'] = $userId;
+        $data['status'] = 'pending';
+        $data['transaction_id'] = $transaction['transaction_id'];
+        $data['request_id'] = $requestId;
+
+        $withdrawal = $this->withdrawalModel->create($data);
+
+        if (!$withdrawal) {
+            // بازگشت موجودی در صورت خطا
+            $this->walletService->cancelWithdrawal(
+                $userId,
+                $amount,
+                $siteCurrency,
+                $transaction['transaction_id']
+            );
+            throw new \RuntimeException('خطا در ثبت درخواست');
+        }
+
+        logger()->activity(
+    'withdrawal_requested',
+    "درخواست برداشت {$amount} " . ($siteCurrency === 'usdt' ? 'USDT' : 'تومان'),
+    $userId,
+    [
+        'withdrawal_id' => $withdrawal->id,
+        'transaction_id' => $transaction['transaction_id'],
+        'request_id' => $requestId,
+        'ip' => $ipAddress,
+        'device' => $deviceFingerprint,
+    ]
+);
+
+        $this->logger->info('withdrawal.request.created', [
+    'channel' => 'withdrawal',
+    'request_id' => $requestId,
+    'user_id' => $userId,
+    'amount' => $amount,
+    'currency' => $siteCurrency,
+    'transaction_id' => $transaction['transaction_id'] ?? null,
+]);
+        // مصرف یک‌بارمصرف challenge پس از موفقیت
+        if (isset($_SESSION['withdraw_challenge_passed'])) {
+            unset($_SESSION['withdraw_challenge_passed']);
+        }
+
+        $this->session->setFlash('success', 'درخواست برداشت شما با موفقیت ثبت شد');
+        redirect('/wallet');
+
+    } catch (\Exception $e) {
+    logger()->error('withdrawal.store.failed', [
+        'channel' => 'withdrawal',
+        'request_id' => $requestId,
+        'user_id' => $userId,
+        'amount' => $amount ?? 0,
+        'currency' => $siteCurrency,
+        'ip' => $ipAddress,
+        'device' => $deviceFingerprint,
+        'error' => $e->getMessage(),
+        'exception' => get_class($e),
+        'file' => $e->getFile(),
+        'line' => $e->getLine(),
+    ]);
+
+$this->session->setFlash('error', 'ثبت درخواست برداشت ناموفق بود. لطفا دوباره تلاش کنید.');
+        $this->session->setFlash('old', $data);
+        redirect('/withdrawal/create');
+    }
+}
+
+    /**
+     * لیست درخواست‌های برداشت کاربر
+     */
+    public function index(): void
+    {
+        $userId = $this->userId();
+
+        try {
+            $withdrawals = $this->withdrawalModel->getUserWithdrawals($userId);
+
+            view('user.withdrawal.index', [
+                'withdrawals' => $withdrawals,
+                'pageTitle' => 'درخواست‌های برداشت'
+            ]);
+
+        } catch (\Exception $e) {
+    logger()->error('withdrawal.index.failed', [
+        'channel' => 'withdrawal',
+        'user_id' => $userId,
+        'error' => $e->getMessage(),
+        'exception' => get_class($e),
+        'file' => $e->getFile(),
+        'line' => $e->getLine(),
+    ]);
+
+            $this->session->setFlash('error', 'خطا در دریافت لیست');
+            redirect('/wallet');
+        }
+    }
+
+    /**
+     * نمایش محدودیت‌های برداشت برای کاربر جاری (JSON)
+     * GET /user/withdrawal/limits?currency=IRT
+     */
+    public function limitsInfo(): void
+    {
+        $userId   = (int)user_id();
