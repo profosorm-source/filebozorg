@@ -1,0 +1,124 @@
+﻿# source: app/Services/KYCService.php
+# lines: 241-360
+# part: 3
+
+        ]);
+
+        $this->logger->info('kyc.submit.success', [
+            'user_id' => $userId,
+            'kyc_id' => $kycId,
+            'status' => $photoshopCheck['suspicious'] ? 'under_review' : 'pending',
+            'suspicious' => $photoshopCheck['suspicious'],
+            'suspicious_reasons' => $photoshopCheck['reasons'] ?? []
+        ]);
+
+        return [
+            'success'    => true,
+            'message'    => 'درخواست احراز هویت با موفقیت ثبت شد',
+            'kyc_id'     => $kycId,
+            'suspicious' => $photoshopCheck['suspicious'],
+        ];
+    }
+
+    /**
+     * تأیید KYC توسط ادمین
+     */
+    public function verifyKYC(int $kycId, int $adminId): array
+    {
+        $this->logger->info('kyc.verify.started', [
+            'kyc_id' => $kycId,
+            'admin_id' => $adminId
+        ]);
+        
+        $kyc = $this->kycModel->find($kycId);
+        if (!$kyc) {
+            $this->logger->error('kyc.verify.not_found', [
+                'kyc_id' => $kycId,
+                'admin_id' => $adminId
+            ]);
+            return ['success' => false, 'message' => 'درخواست یافت نشد'];
+        }
+
+        if (!in_array($kyc->status, ['pending', 'under_review'], true)) {
+            $this->logger->warning('kyc.verify.invalid_status', [
+                'kyc_id' => $kycId,
+                'admin_id' => $adminId,
+                'current_status' => $kyc->status
+            ]);
+            return ['success' => false, 'message' => 'این درخواست قابل تأیید نیست'];
+        }
+
+        $this->db->beginTransaction();
+        try {
+            $ok = $this->kycModel->updateStatus($kycId, 'verified', null);
+            if (!$ok) {
+                $this->db->rollBack();
+                $this->logger->error('kyc.verify.update_failed', [
+                    'kyc_id' => $kycId,
+                    'admin_id' => $adminId,
+                    'user_id' => $kyc->user_id
+                ]);
+                return ['success' => false, 'message' => 'خطا در بروزرسانی وضعیت KYC'];
+            }
+
+            $ok2 = $this->userModel->update((int)$kyc->user_id, [
+                'kyc_status'      => 'verified',
+                'kyc_verified_at' => date('Y-m-d H:i:s'),
+                'updated_at'      => date('Y-m-d H:i:s'),
+            ]);
+
+            if (!$ok2) {
+                $this->db->rollBack();
+                $this->logger->error('kyc.verify.user_update_failed', [
+                    'kyc_id' => $kycId,
+                    'admin_id' => $adminId,
+                    'user_id' => $kyc->user_id
+                ]);
+                return ['success' => false, 'message' => 'خطا در بروزرسانی کاربر'];
+            }
+
+            $this->db->commit();
+
+            $this->auditTrail->record('kyc.approved', (int)$kyc->user_id, [
+                'kyc_id'   => $kycId,
+                'admin_id' => $adminId,
+            ], $adminId);
+
+            $this->logger->info('kyc.verify.success', [
+                'kyc_id' => $kycId,
+                'admin_id' => $adminId,
+                'user_id' => $kyc->user_id
+            ]);
+
+            if ($this->notificationService) {
+                try {
+                    $this->notificationService->kycVerified((int)$kyc->user_id);
+                } catch (\Throwable $e) {
+                    $this->logger->error('legacy.log_error_advanced', ['args' => [
+                        'خطا در ارسال نوتیفیکیشن تأیید KYC',
+                        'ERROR',
+                        $e,
+                        ['kyc_id' => $kycId, 'user_id' => $kyc->user_id]
+                    ]]);
+                }
+            }
+
+            return ['success' => true, 'message' => 'احراز هویت با موفقیت تأیید شد'];
+        } catch (\Exception $e) {
+            $this->db->rollBack();
+            $this->logger->error('legacy.log_error_advanced', ['args' => [
+                'خطای سیستمی در تأیید KYC',
+                'CRITICAL',
+                $e,
+                ['kyc_id' => $kycId, 'admin_id' => $adminId, 'user_id' => $kyc->user_id ?? null]
+            ]]);
+            return ['success' => false, 'message' => 'خطای سیستمی در تأیید KYC'];
+        }
+    }
+
+    /**
+     * رد KYC توسط ادمین
+     */
+    public function rejectKYC(int $kycId, string $reason, int $adminId = 0): array
+    {
+        $this->logger->info('kyc.reject.started', [
