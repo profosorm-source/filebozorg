@@ -1,0 +1,124 @@
+﻿# source: views/admin/dashboard.php
+# lines: 481-600
+# part: 5
+
+        $rateColor  = $activeRate >= 70 ? 'var(--up)' : ($activeRate >= 40 ? 'var(--warn)' : 'var(--down)');
+        ?>
+        <div class="w-card" style="--accent-color:var(--gold);--icon-bg:var(--gold-subtle)">
+            <div class="w-header">
+                <div class="w-header-left">
+                    <div class="w-header-icon"><span class="material-icons">bar_chart</span></div>
+                    <h3>خلاصه آمار</h3>
+                </div>
+                <a href="<?= url('/admin/kpi') ?>" class="w-kpi-link">
+                    <span class="material-icons">insights</span>KPI
+                </a>
+            </div>
+            <div class="w-body">
+                <div class="w-mini-grid">
+                    <div class="w-mini-stat" style="--ms-accent:var(--up)">
+                        <div class="w-mini-label">کاربران فعال</div>
+                        <div class="w-mini-val"><?= fa_number($stats['active_users'] ?? 0) ?></div>
+                        <div class="w-mini-sub" style="color:var(--up)">+<?= fa_number($stats['today_users'] ?? 0) ?> امروز</div>
+                    </div>
+                    <div class="w-mini-stat" style="--ms-accent:var(--down)">
+                        <div class="w-mini-label">کاربران مسدود</div>
+                        <div class="w-mini-val"><?= fa_number($stats['banned_users'] ?? 0) ?></div>
+                        <div class="w-mini-sub" style="color:var(--down)"><?= (100 - $activeRate) ?>٪ کل</div>
+                    </div>
+                    <div class="w-mini-stat" style="--ms-accent:var(--warn)">
+                        <div class="w-mini-label">تسک‌های فعال</div>
+                        <div class="w-mini-val"><?= fa_number($stats['active_tasks'] ?? 0) ?></div>
+                        <div class="w-mini-sub">از <?= fa_number($stats['total_tasks'] ?? 0) ?> کل</div>
+                    </div>
+                    <div class="w-mini-stat" style="--ms-accent:var(--down)">
+                        <div class="w-mini-label">تیکت اورژانسی</div>
+                        <div class="w-mini-val"><?= fa_number($stats['urgent_tickets'] ?? 0) ?></div>
+                        <div class="w-mini-sub" style="color:var(--down)">بی‌پاسخ</div>
+                    </div>
+                    <div class="w-mini-stat w-mini-full" style="--ms-accent:var(--info)">
+                        <div style="display:flex;justify-content:space-between;align-items:center">
+                            <div>
+                                <div class="w-mini-label">KYC در انتظار</div>
+                                <div class="w-mini-val"><?= fa_number($stats['pending_kyc'] ?? 0) ?></div>
+                            </div>
+                            <a href="<?= url('/admin/kyc') ?>" class="w-inline-link">
+                                بررسی<span class="material-icons">chevron_left</span>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                <div class="w-rate-card">
+                    <div class="w-rate-header">
+                        <span class="w-rate-title">نرخ فعال‌سازی کاربران</span>
+                        <span class="w-rate-pct" style="color:<?= $rateColor ?>"><?= $activeRate ?>٪</span>
+                    </div>
+                    <div class="w-prog-bar">
+                        <div class="w-prog-fill" style="width:<?= $activeRate ?>%;background:<?= $rateColor ?>"></div>
+                    </div>
+                    <div class="w-rate-sub">فعال: <?= fa_number($stats['active_users'] ?? 0) ?> از <?= fa_number($stats['total_users'] ?? 0) ?> کاربر</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ورود/خروج مدیران -->
+        <div class="card mt-2">
+            <div class="card-header">
+                <h3><span class="material-icons">admin_panel_settings</span>دسترسی مدیران</h3>
+            </div>
+            <div class="card-body" style="padding:4px 20px 12px">
+                <?php
+                $adminAccessLog = $adminAccessLog ?? [];
+                $actionLabels = [
+                    'login'         => ['label' => 'ورود',         'icon' => 'login',        'color' => 'var(--green)'],
+                    'login_success' => ['label' => 'ورود',         'icon' => 'login',        'color' => 'var(--green)'],
+                    'admin_login'   => ['label' => 'ورود ادمین',   'icon' => 'admin_panel_settings', 'color' => 'var(--green)'],
+                    'logout'        => ['label' => 'خروج',         'icon' => 'logout',       'color' => 'var(--orange)'],
+                    'admin_logout'  => ['label' => 'خروج ادمین',   'icon' => 'logout',       'color' => 'var(--orange)'],
+                    'login_failed'  => ['label' => 'ورود ناموفق',  'icon' => 'lock',         'color' => 'var(--red)'],
+                ];
+                if (!empty($adminAccessLog)): ?>
+                    <?php foreach (array_slice($adminAccessLog, 0, 10) as $log):
+    $log = is_array($log) ? $log : [];
+    $action    = $log['type'] ?? $log['action'] ?? 'login';
+                        $meta      = $actionLabels[$action] ?? ['label' => $action, 'icon' => 'history', 'color' => 'var(--text-muted)'];
+                        $roleColor = match($log['role'] ?? '') {
+                            'admin'   => '#ef4444',
+                            'support' => '#f97316',
+                            default   => '#64748b'
+                        };
+                        $roleName = match($log['role'] ?? '') {
+                            'admin'   => 'مدیر',
+                            'support' => 'پشتیبان',
+                            default   => 'کاربر'
+                        };
+                    ?>
+                        <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
+                            <span class="material-icons" style="font-size:20px;color:<?= $meta['color'] ?>;flex-shrink:0"><?= $meta['icon'] ?></span>
+                            <div style="flex:1;min-width:0">
+                                <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">
+                                    <span style="font-size:13px;font-weight:600;color:var(--text-primary)"><?= e($log['full_name'] ?? 'نامشخص') ?></span>
+                                    <span style="font-size:10px;padding:1px 6px;border-radius:4px;background:<?= $roleColor ?>;color:#fff"><?= $roleName ?></span>
+                                    <span style="font-size:11px;color:<?= $meta['color'] ?>;margin-right:2px"><?= $meta['label'] ?></span>
+                                </div>
+                                <div style="display:flex;gap:8px;font-size:11px;color:var(--text-muted)">
+                                    <span><?= e($log['time_ago'] ?? '') ?></span>
+                                    <?php if (!empty($log['ip_address'])): ?>
+                                        <span>•</span><span dir="ltr"><?= e($log['ip_address']) ?></span>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                <?php else: ?>
+                    <div style="padding:24px 0;text-align:center;color:var(--text-muted)">
+                        <span class="material-icons" style="font-size:36px;opacity:0.2;display:block;margin-bottom:8px">manage_accounts</span>
+                        <div style="font-size:12px">هنوز ورود یا خروجی ثبت نشده</div>
+                        <div style="font-size:11px;margin-top:4px;opacity:.7">پس از اولین ورود ادمین اینجا نمایش داده می‌شود</div>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </div>
+
+    </div><!-- /ستون راست -->
+

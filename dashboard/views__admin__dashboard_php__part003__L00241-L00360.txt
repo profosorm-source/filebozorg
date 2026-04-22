@@ -1,0 +1,124 @@
+﻿# source: views/admin/dashboard.php
+# lines: 241-360
+# part: 3
+
+                    <div style="padding:40px 20px;text-align:center">
+                        <div class="spinner"></div>
+                        <p style="margin-top:16px;color:var(--text-muted);font-size:13px">در حال بارگذاری...</p>
+                    </div>
+                </div>
+                <div id="loadMoreContainer" style="padding:16px;text-align:center;border-top:1px solid var(--border);display:none">
+                    <button id="loadMoreBtn" class="btn btn-sm btn-secondary">بارگذاری بیشتر</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- برداشت‌های در انتظار -->
+        <div class="card mt-2">
+            <div class="card-header">
+                <h3><span class="material-icons">payments</span>برداشت‌های در انتظار بررسی</h3>
+                <a href="<?= url('/admin/withdrawals') ?>" class="btn btn-sm btn-primary">مشاهده همه</a>
+            </div>
+            <?php if (empty($pendingWithdrawalsList)): ?>
+                <div class="empty-state" style="padding:40px 20px">
+                    <span class="material-icons">check_circle_outline</span>
+                    <p>هیچ برداشتی در انتظار نیست</p>
+                </div>
+            <?php else: ?>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>کاربر</th>
+                            <th>مبلغ (تومان)</th>
+                            <th>بانک</th>
+                            <th>زمان</th>
+                            <th>عملیات</th>
+                        </tr>
+                    </thead>
+                   <tbody>
+<?php foreach ($pendingWithdrawalsList as $w):
+    $userId = (int)($w['user_id'] ?? 0);
+    $fullName = (string)($w['full_name'] ?? '-');
+    $email = (string)($w['email'] ?? '');
+    $amount = (int)($w['amount'] ?? 0);
+    $bankName = (string)($w['bank_name'] ?? '-');
+    $createdAt = (string)($w['created_at'] ?? 'now');
+
+    $wg = $gradients[$userId % count($gradients)];
+    $wi = mb_substr($fullName !== '' ? $fullName : 'ک', 0, 1, 'UTF-8');
+?>
+    <tr>
+        <td>
+            <div class="user-cell">
+                <div class="user-avatar-sm" style="background:<?= $wg ?>"><?= $wi ?></div>
+                <div class="user-cell-info">
+                    <strong><?= e($fullName) ?></strong>
+                    <small><?= e($email) ?></small>
+                </div>
+            </div>
+        </td>
+        <td><span class="amount-cell positive"><?= fa_number(number_format($amount)) ?></span></td>
+        <td style="font-size:12px;color:var(--text-muted)"><?= e($bankName) ?></td>
+        <td style="font-size:11px;color:var(--text-muted)"><?= jdate('Y/m/d H:i', strtotime($createdAt)) ?></td>
+        <td>
+            <div class="action-btns">
+                <a href="<?= url('/admin/withdrawals') ?>" class="icon-btn approve" title="تأیید"><span class="material-icons">check</span></a>
+                <a href="<?= url('/admin/withdrawals') ?>" class="icon-btn reject"  title="رد"><span class="material-icons">close</span></a>
+                <a href="<?= url('/admin/withdrawals') ?>" class="icon-btn view"    title="جزئیات"><span class="material-icons">visibility</span></a>
+            </div>
+        </td>
+    </tr>
+<?php endforeach; ?>
+</tbody>
+                </table>
+            </div>
+            <?php endif; ?>
+        </div>
+
+        <!-- کاربران جدید -->
+        <div class="card mt-2">
+            <div class="card-header">
+                <h3><span class="material-icons">person_add</span>آخرین کاربران ثبت‌نام شده</h3>
+                <a href="<?= url('/admin/users') ?>" class="btn btn-sm btn-secondary">مشاهده همه</a>
+            </div>
+            <?php if (empty($recentUsers)): ?>
+                <div class="empty-state" style="padding:40px 20px">
+                    <span class="material-icons">group_off</span>
+                    <p>کاربری ثبت نشده</p>
+                </div>
+            <?php else: ?>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>کاربر</th>
+                            <th>موبایل</th>
+                            <th>نقش</th>
+                            <th>وضعیت</th>
+                            <th>تاریخ عضویت</th>
+                            <th>عملیات</th>
+                        </tr>
+                    </thead>
+                <tbody>
+<?php foreach ($recentUsers as $u):
+    $uid = (int)($u['id'] ?? 0);
+    $fullName = (string)($u['full_name'] ?? '-');
+    $email = (string)($u['email'] ?? '');
+    $mobile = (string)($u['mobile'] ?? '-');
+    $role = (string)($u['role'] ?? '');
+    $status = (string)($u['status'] ?? '');
+    $createdAt = (string)($u['created_at'] ?? 'now');
+
+    $ug = $gradients[$uid % count($gradients)];
+    $ui = mb_substr($fullName !== '' ? $fullName : 'ک', 0, 1, 'UTF-8');
+?>
+    <tr>
+        <td>
+            <div class="user-cell">
+                <div class="user-avatar-sm" style="background:<?= $ug ?>"><?= $ui ?></div>
+                <div class="user-cell-info">
+                    <strong><?= e($fullName) ?></strong>
+                    <small><?= e($email) ?></small>
+                </div>
+            </div>

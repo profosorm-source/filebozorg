@@ -1,0 +1,124 @@
+﻿# source: views/admin/dashboard.php
+# lines: 601-720
+# part: 6
+
+</div><!-- /dashboard-grid -->
+<?php
+// بعد از header یا در جای مناسب
+include BASE_PATH . '/views/partials/sentry-widget.php';
+?>
+<?php
+$content = ob_get_clean();
+
+$chartJson  = json_encode(array_values($chartData ?? array_fill(0, 30, 0)));
+$labelsArr  = [];
+for ($i = 29; $i >= 0; $i--) {
+    $labelsArr[] = jdate('m/d', strtotime("-{$i} days"));
+}
+$labelsJson = json_encode($labelsArr);
+
+?>
+
+<script src="<?= asset('assets/vendor/chartjs/chart.umd.min.js') ?>"></script>
+<script>
+(function tick(){
+    var n=new Date();
+    var el=document.getElementById("dash-clock");
+    if(el) el.textContent=String(n.getHours()).padStart(2,"0")+":"+String(n.getMinutes()).padStart(2,"0");
+    setTimeout(tick,1000);
+})();
+
+document.addEventListener("DOMContentLoaded", function(){
+    var ctx = document.getElementById("usersChart");
+    if(ctx) {
+    var dark = !document.documentElement.classList.contains("light");
+    var gc   = dark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.05)";
+    var tc   = dark ? "#475569" : "#94a3b8";
+    new Chart(ctx, {
+        type:"line",
+        data:{
+            labels: <?= $labelsJson ?>,
+            datasets:[{
+                label:"کاربران جدید",
+                data: <?= $chartJson ?>,
+                borderColor:"#5b8af5",
+                backgroundColor:"rgba(91,138,245,0.08)",
+                tension:0.4, fill:true,
+                pointRadius:3, pointBackgroundColor:"#5b8af5", pointHoverRadius:5
+            }]
+        },
+        options:{
+            responsive:true,
+            plugins:{legend:{display:false}},
+            scales:{
+                x:{grid:{color:gc},ticks:{color:tc,font:{size:10,family:"Vazirmatn"}}},
+                y:{grid:{color:gc},ticks:{color:tc,font:{size:10,family:"Vazirmatn"}},beginAtZero:true}
+            }
+        }
+    });
+    } // end if(ctx)
+    
+    // ═══════════════════════════════════════════════════════════════
+    // بارگذاری فعالیت‌های اخیر کاربران
+    // ═══════════════════════════════════════════════════════════════
+    
+    let currentPage = 1;
+    let currentType = "all";
+    let isLoading = false;
+    
+    const activityTypeMap = {
+        "register": { icon: "person_add", color: "#10b981", label: "ثبت‌نام کرد" },
+        "login": { icon: "login", color: "#06b6d4", label: "وارد شد" },
+        "kyc": { icon: "verified_user", color: "#8b5cf6", label: "درخواست احراز هویت" },
+        "task": { icon: "task_alt", color: "#f59e0b", label: "تسک انجام داد" },
+        "withdraw": { icon: "payments", color: "#ef4444", label: "درخواست برداشت" },
+        "deposit": { icon: "account_balance", color: "#10b981", label: "واریز کرد" },
+        "card": { icon: "credit_card", color: "#3b82f6", label: "کارت بانکی اضافه کرد" },
+        "ad": { icon: "campaign", color: "#ec4899", label: "تبلیغ ثبت کرد" }
+    };
+    
+    function loadActivities(append = false) {
+        if (isLoading) return;
+        isLoading = true;
+        
+        if (!append) {
+            currentPage = 1;
+            document.getElementById("userActivitiesContainer").innerHTML = `
+                <div style="padding:40px 20px;text-align:center">
+                    <div class="spinner"></div>
+                    <p style="margin-top:16px;color:var(--text-muted);font-size:13px">در حال بارگذاری...</p>
+                </div>
+            `;
+        }
+        
+        fetch("<?= url('/admin/dashboard/recent-activity') ?>?type=" + currentType + "&limit=20&page=" + currentPage)
+            .then(res => res.json())
+            .then(data => {
+                if (!data.success || !data.data || data.data.length === 0) {
+                    if (!append) {
+                        document.getElementById("userActivitiesContainer").innerHTML = `
+                            <div style="padding:40px 20px;text-align:center;color:var(--text-muted)">
+                                <span class="material-icons" style="font-size:48px;opacity:0.2">history_toggle_off</span>
+                                <p style="margin-top:16px;font-size:14px">فعالیتی یافت نشد</p>
+                            </div>
+                        `;
+                    }
+                    document.getElementById("loadMoreContainer").style.display = "none";
+                    return;
+                }
+                
+                let html = "";
+                data.data.forEach(activity => {
+                    const typeInfo = activityTypeMap[activity.type] || { icon: "info", color: "#64748b", label: activity.description };
+                    const avatar = activity.avatar_url || "<?= asset('assets/images/default-avatar.png') ?>";
+                    const fullName = activity.full_name || "کاربر ناشناس";
+                    const email = activity.email || "";
+                    
+                    html += `
+                        <div class="user-activity-item" style="display:flex;gap:16px;padding:16px 20px;border-bottom:1px solid var(--border);transition:background 0.2s">
+                            <div style="flex-shrink:0">
+                                <img src="${avatar}" alt="${fullName}" style="width:48px;height:48px;border-radius:50%;object-fit:cover;border:2px solid var(--border)">
+                            </div>
+                            <div style="flex:1;min-width:0">
+                                <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+                                    <span style="font-weight:600;font-size:14px;color:var(--text-primary)">${fullName}</span>
