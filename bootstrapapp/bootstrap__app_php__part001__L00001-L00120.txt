@@ -1,0 +1,124 @@
+﻿# source: bootstrap/app.php
+# lines: 1-120
+# part: 1
+
+<?php
+
+use Core\Container;
+use Core\Application;
+use Core\Session;
+use Core\Database;
+use Core\Logger;
+use App\Models\User;
+use App\Services\AuthService;
+use App\Services\CaptchaService;
+use App\Models\SystemSetting;
+use App\Models\ActivityLog;
+use App\Models\TwoFactorCode;
+use App\Services\AuditTrail;
+use App\Services\WalletService;
+use App\Services\NotificationService;
+use App\Services\UploadService;
+use App\Services\WithdrawalLimitService;
+use App\Services\WithdrawalService;
+use App\Services\UserLevelService;
+use App\Services\ContentService;
+use App\Services\InvestmentService;
+use App\Services\LotteryService;
+use App\Services\ManualDepositService;
+use App\Services\CryptoDepositService;
+use App\Services\CryptoVerificationService;
+use App\Services\PaymentService;
+use App\Services\StoryPromotionService;
+use App\Services\KYCService;
+use App\Services\BannerService;
+use App\Services\TwoFactorService;
+use App\Services\CustomTaskAnalyticsService;
+use App\Models\TaskExecution;
+use App\Models\Transaction;
+use App\Models\ReferralCommission;
+use App\Models\Notification;
+use App\Models\SocialAccount;
+use App\Models\Investment;
+use App\Models\LotteryRound;
+use App\Models\CustomTaskDispute;
+use App\Models\CustomTask;
+use App\Models\CustomTaskSubmission;
+
+
+// BASE_PATH
+if (!defined('BASE_PATH')) {
+    define('BASE_PATH', dirname(__DIR__));
+}
+
+// Autoloader — vendor/autoload.php + PSR-4 (Core, App)
+require_once BASE_PATH . '/core/Autoloader.php';
+\Core\Autoloader::register();
+
+// Helpers از طریق composer autoload (files section) لود می‌شوند
+// نیازی به require_once دستی نیست
+
+// ── بارگذاری .env ────────────────────────────────────────────
+$envPath = BASE_PATH . '/.env';
+if (file_exists($envPath)) {
+    $env = parse_ini_file($envPath, false, INI_SCANNER_RAW);
+    if ($env === false) {
+        die('.env file is invalid');
+    }
+    $appDebug = filter_var($env['APP_DEBUG'] ?? false, FILTER_VALIDATE_BOOLEAN);
+    if ($appDebug) {
+        error_reporting(E_ALL);
+        ini_set('display_errors', '1');
+    } else {
+        error_reporting(0);
+        ini_set('display_errors', '0');
+    }
+} else {
+    // قبل از لود config، حداقل خطاها رو نشان بده
+    error_reporting(E_ALL);
+    ini_set('display_errors', '1');
+}
+
+// Check APP_KEY
+if (config('app.key') === '') {
+    throw new Exception('APP_KEY must be set in environment variables');
+}
+
+// Container Singleton
+$container = Container::getInstance();
+
+// ─── Logger — Singleton مرکزی لاگ ────────────────────────────────────────────
+// PSR-3 Compatible Logging System
+$container->singleton(\App\Services\LogService::class, function($c) {
+    return new \App\Services\LogService(
+        $c->make(\Core\Database::class),
+        $c->make(\App\Models\ActivityLog::class)
+    );
+});
+
+$container->singleton(\Core\Logger::class, function($c) {
+    return new \Core\Logger(
+        $c->make(\App\Services\LogService::class)
+    );
+});
+
+$container->singleton(\App\Controllers\Admin\VitrineController::class, function($c) {
+    return new \App\Controllers\Admin\VitrineController(
+        $c->make(\App\Models\VitrineListing::class),
+        $c->make(\App\Models\VitrineRequest::class),
+        $c->make(\App\Services\VitrineService::class),
+        $c->make(\App\Services\WalletService::class),
+        $c->make(\App\Services\AuditTrail::class)
+    );
+});
+
+// =========================
+// Sentry-like Services
+// =========================
+
+$container->singleton(\App\Services\Sentry\Alerting\AlertDispatcher::class, function($c) {
+    return new \App\Services\Sentry\Alerting\AlertDispatcher(
+        $c->make(\Core\Database::class),
+        $c->make(\Core\Logger::class)
+    );
+});

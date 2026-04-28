@@ -1,0 +1,124 @@
+﻿# source: bootstrap/app.php
+# lines: 241-360
+# part: 3
+
+$container->singleton(CustomTaskAnalyticsService::class, function($c) {
+    return new CustomTaskAnalyticsService(
+        $c->make(Database::class),
+        $c->make(Cache::class)
+    );
+});
+
+$container->singleton(SystemSetting::class, function($c) {
+    return new SystemSetting($c->make(Database::class));
+});
+
+$container->singleton(AuthService::class, function($c) {
+    return new AuthService(
+        $c->make(User::class),
+        $c->make(\App\Models\PasswordReset::class),
+        $c->make(ActivityLog::class),
+        $c->make(Session::class),
+        $c->make(\Core\RateLimiter::class),
+        $c->make(\App\Services\SessionService::class),
+        $c->make(\Core\Logger::class),
+        $c->make(\App\Services\AuditTrail::class),
+        $c->make(\App\Services\EmailService::class)
+    );
+});
+
+
+$container->singleton(CaptchaService::class, function($c) {
+    return new CaptchaService(
+        $c->make(Database::class),
+        $c->make(SystemSetting::class),
+        $c->make(Session::class)
+    );
+});
+
+$container->singleton(User::class, function($c) {
+    return new User($c->make(Database::class));
+});
+
+$container->singleton(\App\Services\SettingService::class, function($c) {
+    return new \App\Services\SettingService(
+        $c->make(\App\Models\Setting::class),
+        $c->make(Database::class)
+    );
+});
+
+$container->singleton(\App\Models\Setting::class, function($c) {
+    return new \App\Models\Setting($c->make(Database::class));
+});
+
+
+// ─── Singletons: Simple Services ─────────────────────────────────────────
+$container->singleton(App\Services\WalletService::class, function($c) {
+    return new App\Services\WalletService(
+        $c->make(Database::class),
+        $c->make(App\Models\Wallet::class),
+        $c->make(App\Models\Transaction::class),
+        $c->make(\Core\IdempotencyKey::class),
+        $c->make(Core\Logger::class),
+        $c->make(App\Services\AuditTrail::class)
+    );
+});
+
+$container->singleton(\App\Services\GeoIPService::class, function($c) {
+    return new \App\Services\GeoIPService(
+        $c->make(Database::class)
+    );
+});
+
+// ─── Distributed Lock Service ─────────────────────────────
+$container->singleton(\App\Services\DistributedLockService::class, function($c) {
+    return new \App\Services\DistributedLockService();
+});
+
+// ─── Query Optimization Service ───────────────────────────
+$container->singleton(\App\Services\QueryOptimizationService::class, function($c) {
+    return new \App\Services\QueryOptimizationService(
+        $c->make(Database::class)
+    );
+});
+
+// ─── Log Rotation Service ─────────────────────────────────
+$container->singleton(\App\Services\LogRotationService::class, function($c) {
+    return new \App\Services\LogRotationService(
+        $c->make(Database::class)
+    );
+});
+
+$container->singleton(\App\Services\EmailService::class, function($c) {
+    return new \App\Services\EmailService(
+        $c->make(\App\Models\EmailQueue::class),
+        $c->make(\App\Models\NotificationPreference::class),
+        $c->make(\App\Models\Setting::class),
+        $c->make(\App\Models\User::class),
+        $c->make(Logger::class)
+    );
+});
+
+$container->singleton(NotificationService::class, function($c) {
+    return new NotificationService(
+        $c->make(\App\Models\Notification::class),
+        $c->make(\App\Models\NotificationPreference::class),
+        $c->make(Database::class),
+        $c->make(Logger::class)
+    );
+});
+$container->singleton(UploadService::class, fn() => new UploadService());
+$container->singleton(WithdrawalLimitService::class, fn() => new WithdrawalLimitService());
+$container->singleton(ActivityLog::class, fn() => new ActivityLog());
+$container->singleton(TwoFactorCode::class, fn() => new TwoFactorCode());
+
+
+// Models
+$container->singleton(App\Models\CustomTask::class, function($c) {
+    return new App\Models\CustomTask($c->make(Database::class));
+});
+
+$container->singleton(App\Models\CustomTaskSubmission::class, function($c) {
+    return new App\Models\CustomTaskSubmission($c->make(Database::class));
+});
+

@@ -1,0 +1,124 @@
+﻿# source: cron.php
+# lines: 1-120
+# part: 1
+
+<?php
+
+/**
+ * cron.php - نقطه ورود زمانبندی وظایف
+ *
+ * ثبت در crontab سرور (هر دقیقه یکبار اجرا می‌شود):
+ *   * * * * * /usr/bin/php /var/www/html/cron.php >> /var/log/chortke-cron.log 2>&1
+ *
+ * اجرای دستی برای تست:
+ *   php cron.php
+ *   php cron.php --job=email_queue   (فقط یک job خاص)
+ *   php cron.php --dry-run            (فقط نمایش بدون اجرا)
+ */
+
+define('CRON_MODE', true);
+define('BASE_PATH', __DIR__);
+
+// بارگذاری bootstrap
+require_once __DIR__ . '/bootstrap/app.php';
+
+use Core\Scheduler;
+use Core\Container;
+use App\Services\EmailService;
+use App\Services\CryptoVerificationService;
+use App\Services\UserLevelService;
+use App\Services\LotteryService;
+use App\Services\BannerService;
+use App\Services\WithdrawalService;
+use App\Services\StoryPromotionService;
+use App\Services\InfluencerDisputeService;
+use App\Services\NotificationService;
+use App\Services\NotificationAnalyticsService;
+use App\Models\Notification as NotificationModel;
+use App\Models\Advertisement;
+use Core\Cache;
+use Core\Database;
+
+// ==========================================
+//  پارامترهای CLI
+// ==========================================
+$onlyJob = null;
+$dryRun  = false;
+
+foreach ($argv ?? [] as $arg) {
+    if (str_starts_with($arg, '--job=')) {
+        $onlyJob = substr($arg, 6);
+    }
+    if ($arg === '--dry-run') {
+        $dryRun = true;
+    }
+}
+
+if ($dryRun) {
+    echo "[DRY-RUN] فقط نمایش وظایف - اجرا نمی‌شوند\n";
+}
+
+// ==========================================
+//  تعریف وظایف
+// ==========================================
+$scheduler = new Scheduler();
+
+/**
+ * ─────────────────────────────────────────
+ * هر دقیقه
+ * ─────────────────────────────────────────
+ */
+
+// پردازش صف ایمیل‌ها
+$scheduler->everyMinute(function () {
+    $service = Container::getInstance()->make(EmailService::class);
+    $batchSize = feature_config('cron_email_batch_size', 'rollout_percentage', 20);
+    $result  = $service->processQueue($batchSize);
+    return [
+        'sent'   => $result['sent']   ?? 0,
+        'failed' => $result['failed'] ?? 0,
+    ];
+}, 'email_queue');
+
+// تأیید خودکار واریزهای کریپتو در انتظار
+$scheduler->everyMinute(function () {
+    $db      = Database::getInstance();
+    $service = Container::getInstance()->make(CryptoVerificationService::class);
+
+    // واریزهای pending که هنوز تأیید نشده‌اند (حداکثر ۱۲ ساعت قبل)
+    $hours = feature_config('cron_verification_hours', 'rollout_percentage', 12);
+    $limit = feature_config('cron_verification_limit', 'rollout_percentage', 10);
+
+    $pending = $db->fetchAll(
+        "SELECT id FROM crypto_deposits
+         WHERE status = 'pending'
+           AND created_at >= DATE_SUB(NOW(), INTERVAL {$hours} HOUR)
+         ORDER BY created_at ASC
+         LIMIT {$limit}"
+    );
+
+    $verified = 0;
+    foreach ($pending as $row) {
+        $id     = is_array($row) ? $row['id'] : $row->id;
+        $result = $service->autoVerify($id);
+        if (($result['verified'] ?? false) === true) {
+            $verified++;
+        }
+    }
+
+    return ['pending_checked' => count($pending), 'verified' => $verified];
+}, 'crypto_verify');
+
+
+// پاک‌سازی کش منقضی‌شده
+$scheduler->everyMinutes(feature_config('cron_scheduler_interval', 'rollout_percentage', 5), function () {
+    $cleaned = Cache::getInstance()->cleanup();
+    return ['cleaned_files' => $cleaned];
+}, 'cache_cleanup');
+
+/**
+ * ─────────────────────────────────────────
+ * هر ساعت (دقیقه ۰)
+ * ─────────────────────────────────────────
+ */
+

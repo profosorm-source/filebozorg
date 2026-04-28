@@ -1,0 +1,124 @@
+﻿# source: bootstrap/app.php
+# lines: 841-960
+# part: 8
+
+
+$container->singleton(\App\Services\AppealService::class, function($c) {
+    return new \App\Services\AppealService(
+        $c->make(\Core\Database::class),
+        $c->make(\Core\Logger::class)
+    );
+});
+
+$container->singleton(\App\Controllers\Admin\FraudController::class, function($c) {
+    return new \App\Controllers\Admin\FraudController(
+        $c->make(\App\Services\FraudDetectionService::class)
+    );
+});
+
+$container->singleton(\App\Controllers\Admin\AppealAdminController::class, function($c) {
+    return new \App\Controllers\Admin\AppealAdminController(
+        $c->make(\App\Services\AppealService::class)
+    );
+});
+
+$container->singleton(\App\Controllers\User\AppealController::class, function($c) {
+    return new \App\Controllers\User\AppealController(
+        $c->make(\App\Services\AppealService::class),
+        $c->make(\App\Services\UploadService::class)
+    );
+});
+
+$container->singleton(\App\Services\DirectMessageService::class, function($c) {
+    return new \App\Services\DirectMessageService(
+        $c->make(\Core\Database::class),
+        $c->make(\Core\Logger::class),
+        $c->make(\Core\Redis::class)
+    );
+});
+
+$container->singleton(\App\Controllers\User\MessageController::class, function($c) {
+    return new \App\Controllers\User\MessageController(
+        $c->make(\App\Services\DirectMessageService::class),
+        $c->make(\Core\Logger::class)
+    );
+});
+
+$container->singleton(\App\Controllers\Admin\MessageModerationController::class, function($c) {
+    return new \App\Controllers\Admin\MessageModerationController(
+        $c->make(\Core\Database::class),
+        $c->make(\Core\Logger::class)
+    );
+});
+
+$container->singleton(\App\Controllers\User\SocialTaskController::class, function($c) {
+    return new \App\Controllers\User\SocialTaskController(
+        $c->make(\App\Services\SocialTask\SocialTaskService::class),
+        $c->make(\App\Services\SocialTask\TrustScoreService::class),
+        $c->make(\App\Services\SocialTask\RatingService::class),
+        $c->make(\Core\Logger::class)
+    );
+});
+
+$container->singleton(\App\Services\AnalyticsService::class, function($c) {
+    return new \App\Services\AnalyticsService(
+        $c->make(\Core\Database::class),
+        $c->make(\Core\Logger::class)
+    );
+});
+
+$container->singleton(\App\Services\ReportService::class, function($c) {
+    return new \App\Services\ReportService();
+});
+
+$container->singleton(\App\Controllers\Admin\AdminAnalyticsController::class, function($c) {
+    return new \App\Controllers\Admin\AdminAnalyticsController(
+        $c->make(\App\Services\AnalyticsService::class),
+        $c->make(\Core\Logger::class)
+    );
+});
+
+$container->singleton(App\Services\KpiService::class, function($c) {
+    return new App\Services\KpiService(
+        $c->make(Database::class)
+    );
+});
+
+$container->singleton(App\Services\SEOExecutionService::class, function($c) {
+    return new App\Services\SEOExecutionService(
+        $c->make(Database::class),
+        $c->make(\App\Models\SEOExecution::class)
+    );
+});
+
+$container->singleton(App\Services\SEOKeywordService::class, function($c) {
+    return new App\Services\SEOKeywordService(
+        $c->make(Database::class),
+        $c->make(\App\Models\SEOKeyword::class)
+    );
+});
+
+$container->singleton(App\Services\SessionService::class, function($c) {
+    return new App\Services\SessionService(
+        $c->make(\App\Models\UserSession::class),
+        $c->make(\App\Services\RiskPolicyService::class),
+        $c->make(\Core\Logger::class)
+    );
+});
+
+$container->singleton(App\Services\SitemapService::class, function($c) {
+    return new App\Services\SitemapService(
+        $c->make(Database::class)
+    );
+});
+
+$container->singleton(App\Services\SocialAccountService::class, function($c) {
+    return new App\Services\SocialAccountService(
+        $c->make(Database::class),
+        $c->make(\App\Models\SocialAccount::class)
+    );
+});
+
+$container->singleton(App\Services\UserService::class, function($c) {
+    return new App\Services\UserService(
+        $c->make(Database::class),

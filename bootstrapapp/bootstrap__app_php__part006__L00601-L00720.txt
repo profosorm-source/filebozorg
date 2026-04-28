@@ -1,0 +1,124 @@
+﻿# source: bootstrap/app.php
+# lines: 601-720
+# part: 6
+
+    return new TwoFactorService(
+        $c->make(User::class),
+        $c->make(TwoFactorCode::class),
+        $c->make(Session::class)
+    );
+});
+
+
+$container->singleton(SEOTaskService::class, function($c) {
+    return new SEOTaskService($c->make(WalletService::class));
+});
+
+
+$container->singleton(UserDashboardService::class, function($c) {
+    return new UserDashboardService(
+        $c->make(WalletService::class),
+        $c->make(UserLevelService::class),
+        $c->make(ReferralCommission::class),
+        $c->make(Transaction::class),
+        $c->make(ActivityLog::class),
+        $c->make(Advertisement::class),
+        $c->make(TaskExecution::class),
+        $c->make(Notification::class),
+        $c->make(SocialAccount::class),
+        $c->make(Investment::class),
+        $c->make(LotteryRound::class)
+    );
+});
+
+
+// ─── Auto-generated Model Bindings ─────────────────────────────────────
+$container->singleton(App\Models\AdTask::class, function($c) {
+    return new App\Models\AdTask($c->make(Database::class));
+});
+
+$container->singleton(App\Models\BankCard::class, function($c) {
+    return new App\Models\BankCard($c->make(Database::class));
+});
+
+$container->singleton(App\Models\Banner::class, function($c) {
+    return new App\Models\Banner($c->make(Database::class));
+});
+
+$container->singleton(App\Models\BannerPlacement::class, function($c) {
+    return new App\Models\BannerPlacement($c->make(Database::class));
+});
+
+$container->singleton(App\Models\BugReport::class, function($c) {
+    return new App\Models\BugReport($c->make(Database::class));
+});
+
+$container->singleton(App\Models\BugReportComment::class, function($c) {
+    return new App\Models\BugReportComment($c->make(Database::class));
+});
+
+$container->singleton(App\Models\ContentAgreement::class, function($c) {
+    return new App\Models\ContentAgreement($c->make(Database::class));
+});
+
+$container->singleton(App\Models\ContentRevenue::class, function($c) {
+    return new App\Models\ContentRevenue($c->make(Database::class));
+});
+
+$container->singleton(App\Models\ContentSubmission::class, function($c) {
+    return new App\Models\ContentSubmission($c->make(Database::class));
+});
+
+$container->singleton(App\Models\CryptoDeposit::class, function($c) {
+    return new App\Models\CryptoDeposit($c->make(Database::class));
+});
+
+$container->singleton(App\Models\CryptoDepositIntent::class, function($c) {
+    return new App\Models\CryptoDepositIntent($c->make(Database::class));
+});
+
+
+$container->singleton(App\Models\EmailQueue::class, function($c) {
+    return new App\Models\EmailQueue($c->make(Database::class));
+});
+
+$container->singleton(App\Models\InfluencerProfile::class, function($c) {
+    return new App\Models\InfluencerProfile($c->make(Database::class));
+});
+
+$container->singleton(App\Models\InvestmentProfit::class, function($c) {
+    return new App\Models\InvestmentProfit($c->make(Database::class));
+});
+
+$container->singleton(App\Models\InvestmentWithdrawal::class, function($c) {
+    return new App\Models\InvestmentWithdrawal($c->make(Database::class));
+});
+
+$container->singleton(App\Models\KYCVerification::class, function($c) {
+    return new App\Models\KYCVerification($c->make(Database::class));
+});
+
+$container->singleton(App\Models\LotteryDailyNumber::class, function($c) {
+    return new App\Models\LotteryDailyNumber($c->make(Database::class));
+});
+
+$container->singleton(App\Models\LotteryParticipation::class, function($c) {
+    return new App\Models\LotteryParticipation($c->make(Database::class));
+});
+
+$container->singleton(App\Models\LotteryVote::class, function($c) {
+    return new App\Models\LotteryVote($c->make(Database::class));
+});
+
+$container->singleton(App\Models\ManualDeposit::class, function($c) {
+    return new App\Models\ManualDeposit($c->make(Database::class));
+});
+
+$container->singleton(App\Models\NotificationPreference::class, function($c) {
+    return new App\Models\NotificationPreference($c->make(Database::class));
+});
+
+$container->singleton(App\Models\Page::class, function($c) {
+    return new App\Models\Page($c->make(Database::class));
+});
+

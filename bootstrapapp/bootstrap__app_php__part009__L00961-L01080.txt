@@ -1,0 +1,124 @@
+﻿# source: bootstrap/app.php
+# lines: 961-1080
+# part: 9
+
+        $c->make(User::class)
+    );
+});
+
+$container->singleton(\App\Services\UserSettingsService::class, function($c) {
+    return new \App\Services\UserSettingsService(
+        $c->make(\Core\Database::class),
+        $c->make(\Core\Logger::class),
+        $c->make(\App\Models\User::class)
+    );
+});
+
+$container->singleton(\App\Controllers\User\SettingsController::class, function($c) {
+    return new \App\Controllers\User\SettingsController(
+        $c->make(\App\Models\User::class),
+        $c->make(\App\Services\UserSettingsService::class),
+        $c->make(\Core\Logger::class)
+    );
+});
+
+// ─── AntiFraud Services ───────────────────────────────────────────────────
+$container->singleton(\App\Services\AntiFraud\IPQualityService::class, function($c) {
+    return new \App\Services\AntiFraud\IPQualityService($c->make(Database::class));
+});
+
+$container->singleton(\App\Services\AntiFraud\BrowserFingerprintService::class, function($c) {
+    return new \App\Services\AntiFraud\BrowserFingerprintService($c->make(Database::class));
+});
+
+
+
+$container->singleton(\App\Services\AntiFraud\AccountTakeoverService::class, function($c) {
+    return new \App\Services\AntiFraud\AccountTakeoverService(
+        $c->make(Database::class),
+        $c->make(\App\Services\AntiFraud\SessionAnomalyService::class),
+        $c->make(\App\Services\AntiFraud\IPQualityService::class)
+    );
+});
+
+// ─── UserSession Model ────────────────────────────────────────────────────
+$container->singleton(\App\Models\UserSession::class, function($c) {
+    return new \App\Models\UserSession($c->make(Database::class));
+});
+
+// ─── FeatureFlagService ───────────────────────────────────────────────────
+$container->singleton(\App\Services\FeatureFlagService::class, function($c) {
+    return new \App\Services\FeatureFlagService(
+        $c->make(\App\Models\FeatureFlag::class),
+        $c->make(Database::class)
+    );
+});
+
+// ─── Core Services ────────────────────────────────────────────────────────
+$container->singleton(\Core\RateLimiter::class, function($c) {
+    return new \Core\RateLimiter();
+});
+
+
+
+// ─── AdminDashboardService ────────────────────────────────────────────────────
+$container->singleton(\App\Services\AdminDashboardService::class, function($c) {
+    return new \App\Services\AdminDashboardService(
+        $c->make(Database::class),
+        $c->make(Logger::class)
+    );
+});
+
+// ─── VitrineService ───────────────────────────────────────────────────────────
+$container->singleton(\App\Services\VitrineService::class, function($c) {
+    return new \App\Services\VitrineService(
+        $c->make(\App\Models\VitrineListing::class),
+        $c->make(\App\Models\VitrineRequest::class),
+        $c->make(WalletService::class),
+        $c->make(NotificationService::class),
+        $c->make(\App\Services\FeatureFlagService::class),
+        $c->make(Database::class),
+        $c->make(Logger::class)
+    );
+});
+
+// ─── SocialTask Module ────────────────────────────────────────────────────
+$container->singleton(\App\Services\SocialTask\TrustScoreService::class, function($c) {
+    return new \App\Services\SocialTask\TrustScoreService(
+        $c->make(\Core\Database::class),
+        $c->make(\App\Services\UserScoreService::class)
+    );
+});
+
+$container->singleton(\App\Services\SocialTask\SocialTaskScoringService::class, function($c) {
+    return new \App\Services\SocialTask\SocialTaskScoringService();
+});
+
+$container->singleton(\App\Services\SocialTask\SilentAntiFraudService::class, function($c) {
+    return new \App\Services\SocialTask\SilentAntiFraudService(
+        $c->make(\Core\Database::class),
+        $c->make(\App\Services\AntiFraud\IPQualityService::class),
+        $c->make(\App\Services\AntiFraud\BrowserFingerprintService::class),
+        $c->make(\App\Services\AntiFraud\SessionAnomalyService::class),
+        $c->make(\App\Services\SocialTask\TrustScoreService::class),
+        $c->make(\App\Services\SocialTask\SocialTaskScoringService::class),
+        $c->make(\App\Services\AuditTrail::class),
+        $c->make(\App\Services\NotificationService::class)
+    );
+});
+
+$container->singleton(\App\Services\SocialTask\SocialTaskService::class, function($c) {
+    return new \App\Services\SocialTask\SocialTaskService(
+        $c->make(\Core\Database::class),
+        $c->make(\App\Services\SocialTask\SocialTaskScoringService::class),
+        $c->make(\App\Services\SocialTask\TrustScoreService::class),
+        $c->make(\App\Services\SocialTask\SilentAntiFraudService::class),
+        $c->make(\App\Services\WalletService::class),
+        $c->make(\App\Services\NotificationService::class),
+        $c->make(\App\Services\ApiRateLimiter::class),
+        $c->make(\Core\Logger::class)
+    );
+});
+
+$container->singleton(\App\Services\SocialTask\RatingService::class, function($c) {
+    return new \App\Services\SocialTask\RatingService(

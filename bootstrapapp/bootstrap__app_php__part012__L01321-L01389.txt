@@ -1,0 +1,73 @@
+﻿# source: bootstrap/app.php
+# lines: 1321-1389
+# part: 12
+
+        $c->make(\App\Services\LedgerService::class),
+        $c->make(\App\Services\AuditTrail::class)
+    );
+});
+
+$container->singleton(\App\Services\ReconciliationService::class, function($c) {
+    return new \App\Services\ReconciliationService(
+        $c->make(\App\Models\Order::class),
+        $c->make(\App\Models\Transaction::class),
+        $c->make(\App\Models\LedgerEntry::class),
+        $c->make(\App\Models\Wallet::class),
+        $c->make(\Core\Database::class),
+        $c->make(\Core\Logger::class),
+        $c->make(\App\Services\WalletService::class),
+        $c->make(\App\Services\LedgerService::class),
+        $c->make(\App\Services\ReferralCommissionService::class),
+        $c->make(\App\Services\AuditTrail::class)
+    );
+});
+
+// ---------------------------------------------------------------------
+// Unified ReferralService (Sprint 4)
+// ---------------------------------------------------------------------
+
+$container->singleton(\App\Services\ReferralService::class, function($c) {
+    return new \App\Services\ReferralService(
+        $c->make(\Core\Database::class),
+        $c->make(\Core\Logger::class),
+        $c->make(\App\Services\WalletService::class),
+        $c->make(\App\Services\NotificationService::class),
+        $c->make(\App\Services\AuditTrail::class),
+        $c->make(\App\Models\ReferralCommission::class),
+        $c->make(\App\Models\User::class)
+    );
+});
+
+// ---------------------------------------------------------------------
+// PolicyService (Sprint 5)
+// ---------------------------------------------------------------------
+
+$container->singleton(\App\Services\PolicyService::class, function($c) {
+    return new \App\Services\PolicyService(
+        $c->make(\Core\Database::class),
+        $c->make(\Core\Logger::class),
+        $c->make(\App\Models\User::class),
+        $c->make(\App\Models\Role::class),
+        $c->make(\App\Services\AuditTrail::class)
+    );
+});
+
+// ---------------------------------------------------------------------
+// Sprint 6: Upload Enforcement (already exists in app.php)
+// ---------------------------------------------------------------------
+
+// ---------------------------------------------------------------------
+// Sprint 7: OAuthService (Social Login)
+// ---------------------------------------------------------------------
+
+$container->singleton(\App\Services\OAuthService::class, function($c) {
+    return new \App\Services\OAuthService(
+        $c->make(\Core\Database::class),
+        $c->make(\Core\Logger::class),
+        $c->make(\App\Models\User::class),
+        $c->make(\App\Models\SocialAccount::class),
+        $c->make(\App\Services\AuthService::class),
+        $c->make(\App\Services\NotificationService::class),
+        $c->make(\App\Services\AuditTrail::class)
+    );
+});

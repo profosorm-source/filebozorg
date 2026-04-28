@@ -1,0 +1,124 @@
+﻿# source: bootstrap/app.php
+# lines: 1081-1200
+# part: 10
+
+        $c->make(\Core\Database::class),
+        $c->make(\Core\Logger::class)
+    );
+});
+ 
+// ─── Admin SocialTask Controller ─────────────────────────────────────────
+$container->singleton(\App\Controllers\Admin\SocialTaskController::class, function($c) {
+    return new \App\Controllers\Admin\SocialTaskController(
+        $c->make(\App\Services\SocialTask\SocialTaskService::class),
+        $c->make(\App\Services\SocialTask\TrustScoreService::class),
+        $c->make(\App\Services\SocialTask\RatingService::class),
+        $c->make(\App\Services\SocialTask\SilentAntiFraudService::class),
+        $c->make(\App\Services\WalletService::class),
+        $c->make(\Core\Database::class),
+        $c->make(\App\Services\AuditTrail::class)
+    );
+});
+
+$container->singleton(\App\Controllers\PaymentController::class, function($c) {
+    return new \App\Controllers\PaymentController(
+        $c->make(\App\Services\WalletService::class),
+        $c->make(\App\Services\PaymentService::class),
+        $c->make(\Core\Logger::class)
+    );
+});
+
+$container->singleton(\Core\Database::class, function () {
+    return \Core\Database::getInstance();
+});
+
+// ─── Phase 3 Services ─────────────────────────────────────────────────────
+// ✅ Real-time, Caching, Verification, Performance Optimization
+
+$container->singleton(\App\Services\WebSocketService::class, function($c) {
+    return new \App\Services\WebSocketService(
+        $c->make(\Core\Database::class),
+        $c->make(\Core\Logger::class)
+    );
+});
+
+$container->singleton(\App\Services\VerificationService::class, function($c) {
+    return new \App\Services\VerificationService(
+        $c->make(\Core\Database::class),
+        $c->make(\Core\Logger::class)
+    );
+});
+
+$container->singleton(\App\Services\PerformanceOptimizationService::class, function($c) {
+    return new \App\Services\PerformanceOptimizationService(
+        $c->make(\Core\Database::class),
+        $c->make(\Core\Logger::class)
+    );
+});
+
+// Real-time API Controllers
+$container->singleton(\App\Controllers\Api\RealTimeController::class, function($c) {
+    return new \App\Controllers\Api\RealTimeController(
+        $c->make(\App\Services\WebSocketService::class),
+        $c->make(\Core\Logger::class),
+        $c->make(\Core\Request::class),
+        $c->make(\Core\Response::class)
+    );
+});
+
+$container->singleton(\App\Controllers\Api\VerificationController::class, function($c) {
+    return new \App\Controllers\Api\VerificationController(
+        $c->make(\App\Services\VerificationService::class),
+        $c->make(\App\Models\InfluencerProfile::class),
+        $c->make(\Core\Logger::class),
+        $c->make(\Core\Request::class),
+        $c->make(\Core\Response::class)
+    );
+});
+
+$container->singleton(\App\Controllers\Admin\WithdrawalController::class, function($c) {
+    return new \App\Controllers\Admin\WithdrawalController(
+        $c->make(\App\Models\Withdrawal::class),
+        $c->make(\App\Services\BankCardService::class),
+        $c->make(\App\Services\WalletService::class),
+        $c->make(\App\Services\UserService::class),
+        $c->make(\App\Services\WithdrawalService::class),
+		$c->make(\Core\Logger::class)
+    );
+});
+
+// ─── Phase 5e: Advanced Settings & Management ─────────────────────────────
+$container->singleton(\App\Models\UserSetting::class, function($c) {
+    return new \App\Models\UserSetting($c->make(\Core\Database::class));
+});
+
+$container->singleton(\App\Models\DataExport::class, function($c) {
+    return new \App\Models\DataExport($c->make(\Core\Database::class));
+});
+
+$container->singleton(\App\Models\AccountDeletionLog::class, function($c) {
+    return new \App\Models\AccountDeletionLog($c->make(\Core\Database::class));
+});
+
+$container->singleton(\App\Models\SettingsAuditTrail::class, function($c) {
+    return new \App\Models\SettingsAuditTrail($c->make(\Core\Database::class));
+});
+
+$container->singleton(\App\Services\DataExportService::class, function($c) {
+    return new \App\Services\DataExportService(
+        $c->make(\App\Models\DataExport::class),
+        $c->make(\App\Models\User::class),
+        $c->make(\Core\Database::class),
+        $c->make(\Core\Logger::class)
+    );
+});
+
+$container->singleton(\App\Services\AccountDeletionService::class, function($c) {
+    return new \App\Services\AccountDeletionService(
+        $c->make(\App\Models\User::class),
+        $c->make(\App\Models\AccountDeletionLog::class),
+        $c->make(\Core\Database::class),
+        $c->make(\Core\Logger::class)
+    );
+});
+

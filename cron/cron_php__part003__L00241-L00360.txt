@@ -1,0 +1,124 @@
+﻿# source: cron.php
+# lines: 241-360
+# part: 3
+
+        'deleted_system_alerts' => 0,
+    ];
+
+    // sentry_issues
+    $stmt = $db->query("SHOW TABLES LIKE ?", ['sentry_issues']);
+    if ($stmt instanceof \PDOStatement && $stmt->fetchColumn()) {
+        do {
+            $deleted = (int) $db->execute(
+                "DELETE FROM sentry_issues
+                 WHERE created_at < DATE_SUB(NOW(), INTERVAL 90 DAY)
+                 LIMIT 5000"
+            );
+            $result['deleted_sentry_issues'] += $deleted;
+        } while ($deleted === 5000);
+    }
+
+    // system_alerts
+    $stmt = $db->query("SHOW TABLES LIKE ?", ['system_alerts']);
+    if ($stmt instanceof \PDOStatement && $stmt->fetchColumn()) {
+        do {
+            $deleted = (int) $db->execute(
+                "DELETE FROM system_alerts
+                 WHERE is_active = 0
+                   AND created_at < DATE_SUB(NOW(), INTERVAL 90 DAY)
+                 LIMIT 5000"
+            );
+            $result['deleted_system_alerts'] += $deleted;
+        } while ($deleted === 5000);
+    }
+
+    return $result;
+}, 'cleanup_sentry');
+
+// ==========================================
+// Log Growth Guard (Daily 03:10)
+// اگر حجم لاگ در یک ساعت اخیر غیرعادی شد، هشدار ثبت می‌کند
+// ==========================================
+$scheduler->daily('03:10', function () {
+    $db = \Core\Database::getInstance();
+
+    $threshold = 2000; // می‌تونی بعدا از env بخونی
+    $result = [
+        'activity_logs_last_hour' => 0,
+        'system_logs_last_hour' => 0,
+        'security_logs_last_hour' => 0,
+        'performance_logs_last_hour' => 0,
+        'alerts' => [],
+    ];
+
+    $queries = [
+        'activity_logs_last_hour' => "SELECT COUNT(*) FROM activity_logs WHERE created_at >= DATE_SUB(NOW(), INTERVAL 1 HOUR)",
+        'system_logs_last_hour' => "SELECT COUNT(*) FROM system_logs WHERE created_at >= DATE_SUB(NOW(), INTERVAL 1 HOUR)",
+        'security_logs_last_hour' => "SELECT COUNT(*) FROM security_logs WHERE created_at >= DATE_SUB(NOW(), INTERVAL 1 HOUR)",
+        'performance_logs_last_hour' => "SELECT COUNT(*) FROM performance_logs WHERE created_at >= DATE_SUB(NOW(), INTERVAL 1 HOUR)",
+    ];
+
+    foreach ($queries as $key => $sql) {
+        try {
+            $stmt = $db->query($sql);
+            $count = ($stmt instanceof \PDOStatement) ? (int)$stmt->fetchColumn() : 0;
+            $result[$key] = $count;
+
+            if ($count >= $threshold) {
+                logger()->warning('logs.growth.spike.detected', [
+                    'channel' => 'monitoring',
+                    'metric' => $key,
+                    'count' => $count,
+                    'threshold' => $threshold,
+                ]);
+                $result['alerts'][] = ['metric' => $key, 'count' => $count];
+            }
+        } catch (\Throwable $e) {
+            logger()->error('logs.growth.guard.failed', [
+                'channel' => 'monitoring',
+                'metric' => $key,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    return $result;
+}, 'log_growth_guard');
+
+// پاک‌سازی ایمیل‌های ارسال‌شده قدیمی (بیش از ۳۰ روز)
+$scheduler->daily('03:00', function () {
+    $db      = Database::getInstance();
+    $affected = $db->execute(
+        "DELETE FROM email_queue
+         WHERE status = 'sent'
+           AND sent_at < DATE_SUB(NOW(), INTERVAL 30 DAY)"
+    );
+    return ['deleted_emails' => $affected];
+}, 'cleanup_email_queue');
+
+// پردازش پرداخت‌های زمانبندی‌شده
+$scheduler->daily('03:15', function () {
+    $service = Container::getInstance()->make(\App\Services\ScheduledPaymentService::class);
+    $result = $service->processDuePayments(feature_config('cron_scheduled_payment_batch_size', 'rollout_percentage', 50));
+    return $result;
+}, 'scheduled_payments');
+
+// پاک‌سازی تصاویر KYC رد شده قدیمی (۶۰ روز)
+$scheduler->daily('03:30', function () {
+    $db   = Database::getInstance();
+    $rows = $db->fetchAll(
+        "SELECT id, document_front, document_back, selfie
+         FROM kyc_verifications
+         WHERE status = 'rejected'
+           AND updated_at < DATE_SUB(NOW(), INTERVAL 60 DAY)
+           AND documents_deleted = 0"
+    );
+
+    $cleaned = 0;
+    foreach ($rows as $row) {
+        $row = (array)$row;
+        foreach (['document_front', 'document_back', 'selfie'] as $field) {
+            if (!empty($row[$field])) {
+                $path = BASE_PATH . '/storage/uploads/kyc/' . $row[$field];
+                if (file_exists($path)) {
+                    unlink($path);

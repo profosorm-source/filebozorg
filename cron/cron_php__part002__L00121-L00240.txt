@@ -1,0 +1,124 @@
+﻿# source: cron.php
+# lines: 121-240
+# part: 2
+
+// غیرفعال کردن آگهی‌های منقضی‌شده
+$scheduler->hourly(function () {
+    $db = Database::getInstance();
+
+    $affected = $db->execute(
+        "UPDATE advertisements
+         SET status = 'completed', updated_at = NOW()
+         WHERE status = 'active'
+           AND (
+             (end_date IS NOT NULL AND end_date < NOW())
+             OR remaining_count <= 0
+             OR remaining_budget <= 0
+           )"
+    );
+
+    return ['expired_ads' => $affected];
+}, 'expire_ads');
+
+// غیرفعال کردن بنرهای منقضی‌شده
+$scheduler->hourly(function () {
+    $service = Container::getInstance()->make(BannerService::class);
+    $count   = $service->deactivateExpiredBanners();
+    return ['deactivated_banners' => $count];
+}, 'expire_banners');
+
+// انقضای نشست‌های قدیمی کاربران (بیش از ۳۰ روز)
+$scheduler->hourly(function () {
+    $db      = Database::getInstance();
+    $affected = $db->execute(
+        "DELETE FROM user_sessions
+         WHERE last_activity < DATE_SUB(NOW(), INTERVAL 30 DAY)"
+    );
+    return ['deleted_sessions' => $affected];
+}, 'cleanup_sessions');
+
+// پاک‌سازی پیام‌های realtime منقضی‌شده
+$scheduler->hourly(function () {
+    $service = Container::getInstance()->make(\App\Services\WebSocketService::class);
+    $deleted = $service->cleanupExpiredMessages();
+    $processed = $service->processAllDelayedMessages();
+    return ['deleted_messages' => $deleted, 'processed_delayed' => $processed];
+}, 'websocket_cleanup');
+
+/**
+ * ─────────────────────────────────────────
+ * روزانه ساعت ۰۲:۰۰
+ * ─────────────────────────────────────────
+ */
+
+// بررسی سطح کاربران (downgrade/upgrade/expire)
+$scheduler->daily('02:00', function () {
+    $service = Container::getInstance()->make(UserLevelService::class);
+
+    $downgrades = $service->checkDowngrades();
+    $expired    = $service->checkExpiredPurchases();
+
+    return [
+        'downgraded' => count($downgrades),
+        'expired'    => $expired,
+    ];
+}, 'user_levels');
+
+// ==============================
+// Retention: Activity/System/Security Logs (Weekly - Sunday)
+// ==============================
+$scheduler->daily('02:30', function () {
+    if ((int) date('w') !== 0) {
+        return ['skipped' => 'cleanup_logs weekly (sunday only)'];
+    }
+
+    $logService = \Core\Container::getInstance()->make(\App\Services\LogService::class);
+    $days = feature_config('cron_cleanup_days', 'rollout_percentage', 30);
+
+    return [
+        'log_cleanup' => $logService->cleanup($days),
+    ];
+}, 'cleanup_logs');
+
+
+// ==============================
+// Retention: Audit Trail Archive (Check daily, run every 30 days)
+// ==============================
+$scheduler->daily('02:40', function () {
+    $archiveDir = __DIR__ . '/storage/audit-archives';
+    if (!is_dir($archiveDir)) {
+        @mkdir($archiveDir, 0755, true);
+    }
+
+    $stateFile = $archiveDir . '/.last_archive_at';
+    $now = time();
+
+    if (file_exists($stateFile)) {
+        $last = (int) trim((string) file_get_contents($stateFile));
+        if ($last > 0 && ($now - $last) < (30 * 86400)) {
+            return ['skipped' => 'archive_audit_trail every 30 days'];
+        }
+    }
+
+    $audit = \Core\Container::getInstance()->make(\App\Services\AuditTrail::class);
+    $result = $audit->archiveOlderThan(30, 2000);
+
+    if (!empty($result['file'])) {
+        file_put_contents($stateFile, (string) $now);
+    }
+
+    return $result;
+}, 'archive_audit_trail');
+
+
+// ==============================
+// Retention: Sentry-like Tables (Weekly - Sunday, chunked)
+// ==============================
+$scheduler->daily('02:50', function () {
+    if ((int) date('w') !== 0) {
+        return ['skipped' => 'cleanup_sentry weekly (sunday only)'];
+    }
+
+    $db = \Core\Database::getInstance();
+    $result = [
+        'deleted_sentry_issues' => 0,

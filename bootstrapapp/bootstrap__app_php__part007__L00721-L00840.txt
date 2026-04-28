@@ -1,0 +1,124 @@
+﻿# source: bootstrap/app.php
+# lines: 721-840
+# part: 7
+
+$container->singleton(App\Models\PasswordReset::class, function($c) {
+    return new App\Models\PasswordReset($c->make(Database::class));
+});
+
+$container->singleton(App\Models\SEOExecution::class, function($c) {
+    return new App\Models\SEOExecution($c->make(Database::class));
+});
+
+$container->singleton(App\Models\SEOKeyword::class, function($c) {
+    return new App\Models\SEOKeyword($c->make(Database::class));
+});
+
+$container->singleton(App\Models\StoryOrder::class, function($c) {
+    return new App\Models\StoryOrder($c->make(Database::class));
+});
+
+$container->singleton(App\Models\TaskDispute::class, function($c) {
+    return new App\Models\TaskDispute($c->make(Database::class));
+});
+
+$container->singleton(App\Models\TaskRecheck::class, function($c) {
+    return new App\Models\TaskRecheck($c->make(Database::class));
+});
+
+$container->singleton(App\Models\Ticket::class, function($c) {
+    return new App\Models\Ticket($c->make(Database::class));
+});
+
+$container->singleton(App\Models\TicketCategory::class, function($c) {
+    return new App\Models\TicketCategory($c->make(Database::class));
+});
+
+$container->singleton(App\Models\TicketMessage::class, function($c) {
+    return new App\Models\TicketMessage($c->make(Database::class));
+});
+
+$container->singleton(App\Models\TradingRecord::class, function($c) {
+    return new App\Models\TradingRecord($c->make(Database::class));
+});
+
+$container->singleton(App\Models\UserBankCard::class, function($c) {
+    return new App\Models\UserBankCard($c->make(Database::class));
+});
+
+$container->singleton(App\Models\Withdrawal::class, function($c) {
+    return new App\Models\Withdrawal($c->make(Database::class));
+});
+
+$container->singleton(App\Models\WithdrawalLimit::class, function($c) {
+    return new App\Models\WithdrawalLimit($c->make(Database::class));
+});
+
+// ─── Auto-generated Service Bindings ───────────────────────────────────
+$container->singleton(App\Services\AdvertiserDashboardService::class, function($c) {
+    return new App\Services\AdvertiserDashboardService(
+        $c->make(Database::class)
+    );
+});
+
+$container->singleton(App\Services\BankCardService::class, function($c) {
+    return new App\Services\BankCardService(
+        $c->make(Database::class),
+        $c->make(\App\Models\UserBankCard::class)
+    );
+});
+
+$container->singleton(App\Services\BugReportService::class, function($c) {
+    return new App\Services\BugReportService(
+        $c->make(Database::class),
+        $c->make(\App\Models\BugReport::class)
+    );
+});
+
+$container->singleton(\App\Controllers\Admin\AuditTrailController::class, function($c) {
+    return new \App\Controllers\Admin\AuditTrailController(
+        $c->make(\App\Services\ExportService::class),
+        $c->make(\Core\Logger::class),
+        $c->make(\App\Services\AuditTrail::class)
+    );
+});
+
+$container->singleton(\App\Controllers\Admin\AuthController::class, function($c) {
+    return new \App\Controllers\Admin\AuthController(
+        $c->make(\Core\Logger::class),
+        $c->make(\App\Services\AuditTrail::class)
+    );
+});
+
+$container->singleton(App\Services\ExportService::class, function($c) {
+    return new App\Services\ExportService(
+        $c->make(Database::class)
+    );
+});
+
+$container->singleton(App\Services\GlobalSearchService::class, function($c) {
+    return new App\Services\GlobalSearchService(
+        $c->make(Database::class)
+    );
+});
+
+$container->singleton(\App\Services\SearchService::class, function($c) {
+    return new \App\Services\SearchService(
+        $c->make(\Core\Database::class),
+        $c->make(\Core\Logger::class)
+    );
+});
+
+$container->singleton(\App\Services\AdvancedSearchService::class, function($c) {
+    return new \App\Services\AdvancedSearchService(
+        $c->make(\Core\Database::class),
+        $c->make(\Core\Logger::class)
+    );
+});
+
+$container->singleton(\App\Services\FraudDetectionService::class, function($c) {
+    return new \App\Services\FraudDetectionService(
+        $c->make(\Core\Database::class),
+        $c->make(\Core\Logger::class)
+    );
+});

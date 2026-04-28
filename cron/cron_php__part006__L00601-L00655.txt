@@ -1,0 +1,59 @@
+﻿# source: cron.php
+# lines: 601-655
+# part: 6
+
+}, 'notification_expire');
+
+/**
+ * هر ساعت: batch aggregation آمار نوتیفیکیشن
+ */
+$scheduler->hourly(function () use ($container) {
+    $analytics = $container->make(NotificationAnalyticsService::class);
+    $stats     = $analytics->runBatchAggregation();
+
+    if ($stats['processed'] > 0) {
+        echo "[Notification] Analytics aggregated {\['processed']} rows
+";
+    }
+
+    return $stats;
+}, 'notification_analytics');
+
+if ($dryRun) {
+    echo "وظایف ثبت‌شده - اجرا نشدند (dry-run mode)\n";
+    exit(0);
+}
+
+$results = $scheduler->run();
+
+// نمایش نتایج
+foreach ($results as $name => $result) {
+    $status = $result['status'];
+    $icon   = match($status) {
+        'ok'      => '✓',
+        'error'   => '✗',
+        'skipped' => '⟳',
+        default   => '?',
+    };
+
+    echo "[{$icon}] {$name}: {$status}";
+
+    if ($status === 'ok' && isset($result['output'])) {
+        $out = $result['output'];
+        if (is_array($out)) {
+            echo ' - ' . implode(', ', array_map(
+                fn($k, $v) => "{$k}={$v}",
+                array_keys($out),
+                array_values($out)
+            ));
+        }
+    }
+
+    if ($status === 'error') {
+        echo ' - ' . ($result['message'] ?? '');
+    }
+
+    echo PHP_EOL;
+}
+
+echo '[' . date('Y-m-d H:i:s') . '] پایان' . PHP_EOL;

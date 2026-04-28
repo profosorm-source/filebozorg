@@ -1,0 +1,124 @@
+﻿# source: cron.php
+# lines: 481-600
+# part: 5
+
+
+/**
+ * هر ساعت: تایید خودکار buyer check هایی که مهلتشان گذشته
+ * وقتی buyer در ۲۴ ساعت پاسخ ندهد → auto-approve → پرداخت به اینفلوئنسر
+ */
+$scheduler->hourly(function () use ($container) {
+    $service = $container->make(StoryPromotionService::class);
+    $count   = $service->processExpiredBuyerChecks();
+    if ($count > 0) {
+        echo "[Influencer] Auto-approved {$count} buyer-check timeout orders\n";
+    }
+});
+
+/**
+ * هر ساعت: رد خودکار سفارش‌هایی که اینفلوئنسر در مهلت پاسخ نداده
+ */
+$scheduler->hourly(function () use ($container) {
+    $service = $container->make(StoryPromotionService::class);
+    $count   = $service->processExpiredPendingAcceptance();
+    if ($count > 0) {
+        echo "[Influencer] Auto-rejected {$count} orders with no influencer response\n";
+    }
+});
+
+/**
+ * هر ساعت: escalate اختلاف‌هایی که peer resolution timeout شده
+ */
+$scheduler->hourly(function () use ($container) {
+    $service = $container->make(InfluencerDisputeService::class);
+    $count   = $service->processExpiredPeerResolutions();
+    if ($count > 0) {
+        echo "[Influencer] Escalated {$count} peer-resolution timeouts to admin\n";
+    }
+});
+
+/**
+ * روزانه: پاکسازی فایل‌های مدرک قدیمی
+ */
+$scheduler->daily('05:00', function () use ($container) {
+    $service = $container->make(StoryPromotionService::class);
+    $count   = $service->cleanupOldFiles(3);
+    if ($count > 0) {
+        echo "[Influencer] Cleaned up proof files for {$count} orders\n";
+    }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 5e — Advanced Settings & Management
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * روزانه: حذف خودکار حساب‌های منقضی و پاک‌سازی فایل‌های صادر شده
+ */
+$scheduler->daily('04:00', function () use ($container) {
+    try {
+        $accountDeletionService = $container->make(\App\Services\AccountDeletionService::class);
+        $dataExportService = $container->make(\App\Services\DataExportService::class);
+
+        // حذف حساب‌های منقضی
+        $deletedCount = $accountDeletionService->processExpiredDeletionRequests();
+        echo "[Phase5e] Processed {$deletedCount} expired account deletion requests\n";
+
+        // پاک‌سازی فایل‌های منقضی
+        $deletedFiles = $dataExportService->deleteExpiredExports();
+        echo "[Phase5e] Cleaned up {$deletedFiles} expired export files\n";
+
+    } catch (\Exception $e) {
+        echo "[Phase5e ERROR] " . $e->getMessage() . "\n";
+    }
+}, 'process_scheduled_tasks');
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// نوتیفیکیشن — Scheduling & Analytics
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * هر دقیقه: ارسال نوتیفیکیشن‌های زمان‌بندی‌شده
+ */
+$scheduler->everyMinute(function () use ($container) {
+    $notifModel = $container->make(NotificationModel::class);
+    $pending    = $notifModel->getPendingScheduled(50);
+
+    if (empty($pending)) {
+        return ['processed' => 0];
+    }
+
+    $notifService = $container->make(NotificationService::class);
+    $processed    = 0;
+
+    foreach ($pending as $notif) {
+        // علامت ارسال‌شده — جلوگیری از ارسال دوباره
+        $notifModel->markAsSent($notif->id);
+
+        // Push برای نوتیف‌های زمان‌بندی‌شده (در صورت نیاز)
+        $notifService->invalidateUnreadCache((int)$notif->user_id);
+        $processed++;
+    }
+
+    if ($processed > 0) {
+        echo "[Notification] Processed {\} scheduled notifications
+";
+    }
+
+    return ['processed' => $processed];
+}, 'notification_scheduled');
+
+/**
+ * هر ساعت: آرشیو نوتیفیکیشن‌های منقضی‌شده
+ */
+$scheduler->hourly(function () use ($container) {
+    $notifModel = $container->make(NotificationModel::class);
+    $count      = $notifModel->archiveExpired();
+
+    if ($count > 0) {
+        echo "[Notification] Archived {\} expired notifications
+";
+    }
+
+    return ['archived' => $count];

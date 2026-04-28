@@ -1,0 +1,124 @@
+﻿# source: bootstrap/app.php
+# lines: 121-240
+# part: 2
+
+
+$container->singleton(\App\Services\Sentry\Alerting\AlertRulesEngine::class, function($c) {
+    return new \App\Services\Sentry\Alerting\AlertRulesEngine(
+        $c->make(\Core\Database::class),
+        $c->make(\Core\Logger::class),
+        $c->make(\App\Services\Sentry\Alerting\AlertDispatcher::class)
+    );
+});
+
+$container->singleton(\App\Services\Sentry\Alerting\EscalationManager::class, function($c) {
+    return new \App\Services\Sentry\Alerting\EscalationManager(
+        $c->make(\Core\Database::class),
+        $c->make(\Core\Logger::class),
+        $c->make(\App\Services\Sentry\Alerting\AlertDispatcher::class)
+    );
+});
+
+$container->singleton(\App\Controllers\Admin\ManualDepositController::class, function($c) {
+    return new \App\Controllers\Admin\ManualDepositController(
+        $c->make(\App\Models\UserBankCard::class),
+        $c->make(\App\Models\User::class),
+        $c->make(\App\Models\ManualDeposit::class),
+        $c->make(\App\Services\WalletService::class),
+        $c->make(\App\Services\ManualDepositService::class),
+        $c->make(\Core\Logger::class)
+    );
+});
+
+$container->singleton(\App\Services\CryptoDepositService::class, function($c) {
+    return new \App\Services\CryptoDepositService(
+        $c->make(\Core\Database::class),
+        $c->make(\App\Services\WalletService::class),
+        $c->make(\App\Services\NotificationService::class),
+        $c->make(\App\Models\CryptoDepositIntent::class),
+        $c->make(\App\Models\CryptoDeposit::class),
+        $c->make(\Core\Logger::class)
+    );
+});
+
+$container->singleton(\App\Controllers\User\WithdrawalController::class, function($c) {
+    return new \App\Controllers\User\WithdrawalController(
+        $c->make(\App\Models\Withdrawal::class),
+        $c->make(\App\Models\UserBankCard::class),
+        $c->make(\App\Services\WithdrawalLimitService::class),
+        $c->make(\App\Services\WalletService::class),
+        $c->make(\App\Services\RiskDecisionService::class),
+        $c->make(\App\Services\WithdrawalService::class),
+        $c->make(\Core\Logger::class)
+    );
+});
+
+$container->singleton(\App\Controllers\Admin\CryptoDepositController::class, function($c) {
+    return new \App\Controllers\Admin\CryptoDepositController(
+        $c->make(\App\Models\User::class),
+        $c->make(\App\Models\CryptoDeposit::class),
+        $c->make(\App\Services\WalletService::class),
+        $c->make(\App\Services\CryptoDepositService::class),
+        $c->make(\Core\Logger::class)
+    );
+});
+
+$container->singleton(\App\Services\Sentry\PerformanceMonitoring\SentryPerformanceMonitor::class, function($c) {
+    return new \App\Services\Sentry\PerformanceMonitoring\SentryPerformanceMonitor(
+        $c->make(\Core\Database::class),
+        $c->make(\Core\Logger::class),
+        []
+    );
+});
+
+$container->singleton(\App\Services\Sentry\ErrorMonitoring\SentryErrorMonitor::class, function($c) {
+    return new \App\Services\Sentry\ErrorMonitoring\SentryErrorMonitor(
+        $c->make(\Core\Database::class),
+        $c->make(\Core\Logger::class),
+        $c->make(\App\Services\Sentry\Alerting\AlertDispatcher::class),
+        $c->make(\App\Services\AuditTrail::class),
+        []
+    );
+});
+
+$container->singleton(\App\Services\Sentry\Audit\AdvancedAuditTrail::class, function($c) {
+    return new \App\Services\Sentry\Audit\AdvancedAuditTrail(
+        $c->make(\Core\Database::class),
+        $c->make(\Core\Logger::class),
+        $c->make(\App\Services\AuditTrail::class),
+        []
+    );
+});
+
+$container->singleton(\App\Services\Sentry\SentryExceptionHandler::class, function($c) {
+    return new \App\Services\Sentry\SentryExceptionHandler(
+        $c->make(\Core\Logger::class)
+    );
+});
+
+
+$container->singleton(App\Services\AuditTrail::class, function($c) {
+    return new App\Services\AuditTrail(
+        $c->make(Database::class),
+        $c->make(Core\Logger::class)
+    );
+});
+
+
+
+// ثبت سرویس‌ها و مدل‌ها
+$container->singleton(Session::class, function() {
+    return Session::getInstance();
+});
+
+$container->singleton(Database::class, function() {
+    return Database::getInstance();
+});
+
+
+$container->singleton(\App\Services\GeoIPService::class, function($c) {
+    return new \App\Services\GeoIPService(
+        $c->make(\Core\Logger::class)
+    );
+});
+

@@ -1,0 +1,124 @@
+﻿# source: bootstrap/app.php
+# lines: 361-480
+# part: 4
+
+$container->singleton(App\Models\CustomTaskDispute::class, function($c) {
+    return new App\Models\CustomTaskDispute($c->make(Database::class));
+});
+
+// Service - CustomTaskService اب ReferralService استعمال کرتا ہے (Sprint 4)
+$container->singleton(App\Services\CustomTaskService::class, function($c) {
+    return new App\Services\CustomTaskService(
+        $c->make(Database::class),
+        $c->make(App\Services\WalletService::class),
+        $c->make(App\Services\UserLevelService::class),
+        $c->make(App\Services\ReferralService::class),
+        $c->make(App\Models\CustomTask::class),
+        $c->make(App\Models\CustomTaskSubmission::class),
+        $c->make(App\Models\CustomTaskDispute::class),
+        $c->make(App\Services\AntiFraud\BrowserFingerprintService::class),
+        $c->make(App\Services\AntiFraud\IPQualityService::class),
+        $c->make(App\Services\AntiFraud\SessionAnomalyService::class)
+    );
+});
+
+// UserLevelService - ReferralService کے ساتھ
+$container->singleton(\App\Services\UserLevelService::class, function($c) {
+    return new \App\Services\UserLevelService(
+        $c->make(\Core\Database::class),
+        $c->make(\App\Services\WalletService::class),
+        $c->make(\App\Services\ReferralService::class),
+        $c->make(\App\Models\UserLevel::class),
+        $c->make(\App\Models\UserLevelHistory::class),
+        $c->make(\Core\Logger::class)
+    );
+});
+
+// Controllers
+$container->singleton(App\Controllers\User\CustomTaskController::class, function($c) {
+    return new App\Controllers\User\CustomTaskController(
+        $c->make(App\Models\CustomTask::class),
+        $c->make(App\Models\CustomTaskSubmission::class),
+        $c->make(App\Services\CustomTaskService::class),
+        $c->make(App\Services\UploadService::class)
+    );
+});
+
+$container->singleton(App\Controllers\Admin\CustomTaskController::class, function($c) {
+    return new App\Controllers\Admin\CustomTaskController(
+        $c->make(App\Services\CustomTaskService::class),
+        $c->make(App\Services\WalletService::class),
+        $c->make(App\Models\CustomTask::class),
+        $c->make(App\Models\CustomTaskSubmission::class)
+    );
+});
+
+$container->singleton(ContentService::class, function($c) {
+    return new ContentService(
+        $c->make(WalletService::class),
+        $c->make(NotificationService::class),
+        $c->make(App\Models\ContentSubmission::class),
+        $c->make(App\Models\ContentRevenue::class),
+        $c->make(App\Models\ContentAgreement::class)
+    );
+});
+
+$container->singleton(\App\Services\InvestmentService::class, function($c) {
+    return new \App\Services\InvestmentService(
+        $c->make(\Core\Database::class),
+        $c->make(\App\Services\WalletService::class),
+        $c->make(\App\Services\NotificationService::class),
+        $c->make(\App\Models\Investment::class),
+        $c->make(\App\Models\TradingRecord::class),
+        $c->make(\App\Models\InvestmentProfit::class),
+        $c->make(\App\Models\InvestmentWithdrawal::class),
+        $c->make(\App\Services\AuditTrail::class),
+        $c->make(\Core\Logger::class)
+    );
+});
+
+$container->singleton(LotteryService::class, function($c) {
+    return new LotteryService(
+        $c->make(WalletService::class),
+        $c->make(NotificationService::class)
+    );
+});
+
+$container->singleton(ManualDepositService::class, function($c) {
+    return new ManualDepositService(
+        $c->make(Database::class),
+        $c->make(WalletService::class),
+        $c->make(NotificationService::class),
+        $c->make(\App\Models\ManualDeposit::class),
+        $c->make(\App\Models\BankCard::class),
+        $c->make(\App\Models\User::class),
+        $c->make(AuditTrail::class),
+        $c->make(Logger::class)
+    );
+});
+
+$container->singleton(CryptoDepositService::class, function($c) {
+    return new CryptoDepositService(
+        $c->make(WalletService::class),
+        $c->make(NotificationService::class)
+    );
+});
+
+$container->singleton(CryptoVerificationService::class, function($c) {
+    return new CryptoVerificationService(
+        $c->make(Database::class),
+        $c->make(Logger::class),
+        $c->make(\App\Models\Setting::class),
+        $c->make(\App\Models\CryptoDeposit::class),
+        $c->make(WalletService::class),
+        $c->make(NotificationService::class)
+    );
+});
+
+$container->singleton(\App\Services\PaymentService::class, function($c) {
+    return new \App\Services\PaymentService(
+        $c->make(\App\Services\WalletService::class),
+        $c->make(\App\Services\NotificationService::class),
+        $c->make(\App\Models\PaymentLog::class),
+        $c->make(\App\Models\BankCard::class),
+        $c->make(\Core\Logger::class),
